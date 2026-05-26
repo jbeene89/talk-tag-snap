@@ -193,8 +193,13 @@ export const scanObjects = createServerFn({ method: "POST" })
       const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
       const rawItems: any[] = Array.isArray(parsed) ? parsed : parsed.items ?? [];
       const items = rawItems
-        .filter((it) => it && it.box && typeof it.box.x === "number" && typeof it.label === "string")
-        .map((it) => ({ label: String(it.label).slice(0, 40), box: it.box as Box }));
+        .map((it) => {
+          if (!it || typeof it.label !== "string") return null;
+          const box = extractBox(it);
+          if (!box) return null;
+          return { label: String(it.label).slice(0, 40), box };
+        })
+        .filter((it): it is { label: string; box: Box } => it !== null);
       return { items };
     } catch (err) {
       console.error("scan failed", err);
