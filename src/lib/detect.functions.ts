@@ -158,3 +158,74 @@ export const scanObjects = createServerFn({ method: "POST" })
       return { items: [], error: "Could not reach AI service." };
     }
   });
+
+type IdentifyAtInput = {
+  imageBase64: string;
+  mimeType: string;
+  point: { x: number; y: number }; // normalized 0..1
+};
+
+export const identifyAtPoint = createServerFn({ method: "POST" })
+  .inputValidator((data: IdentifyAtInput) => {
+    if (
+      !data ||
+      typeof data.imageBase64 !== "string" ||
+      !data.point ||
+      typeof data.point.x !== "number" ||
+      typeof data.point.y !== "number"
+    ) {
+      throw new Error("imageBase64 and point are required");
+    }
+    return data;
+  })
+  .handler(async ({ data }): Promise<DetectResult> => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) return { box: null, label: "", error: "AI is not configured." };
+
+    const base64 = data.imageBase64.includes(",") ? data.imageBase64.split(",")[1] : data.imageBase64;
+    const px = Math.round(data.point.x * 100);
+    const py = Math.round(data.point.y * 100);
+
+    const system =
+      "You identify the single object the user is pointing at in a photo. The user gives a point as normalized percentages " +
+      "from the top-left of the image. Identify the distinct object, equipment, fixture, or part located at or immediately " +
+      "around that point (a board, pole, lift component, device, panel, etc.). " +
+      'Return ONLY: {"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
+      "where the box is a tight bounding box around that object in normalized 0..1 coordinates. " +
+      'If nothing identifiable is at that point, return {"label": "", "box": null}. Use a short specific label (2-4 words). ' +
+      "No prose, no markdown.";
+
+    try {
+      const res = await callGateway(apiKey, {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `The user tapped at x=${px}%, y=${py}% (from top-left). Identify the object at that point and return its bounding box.`,
+              },
+              { type: "image_url", image_url: { url: `data:${data.mimeType};base64,${base64}` } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      if (!res.ok) {
+        console.error("AI gateway error", res.status, await res.text());
+        return { box: null, label: "", error: gatewayErrorMessage(res.status) };
+      }
+
+      const json = await res.json();
+      const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
+      const box = parsed.box && typeof parsed.box.x === "number" ? parsed.box : null;
+      return { box, label: parsed.label || "" };
+    } catch (err) {
+      console.error("identifyAtPoint failed", err);
+      return { box: null, label: "", error: "Could not reach AI service." };
+    }
+  });
+
