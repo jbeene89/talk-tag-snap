@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2 } from "lucide-react";
-import { detectBoundingBox } from "@/lib/detect.functions";
+import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2, Sparkles } from "lucide-react";
+import { detectBoundingBox, scanObjects } from "@/lib/detect.functions";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
