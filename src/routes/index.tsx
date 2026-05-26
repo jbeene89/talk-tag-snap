@@ -408,8 +408,28 @@ function AnnotatePage() {
         </div>
       )}
 
-      {/* Action row: auto-detect + mic */}
+      {/* Action row: tap + auto-detect + mic */}
       <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+        <button
+          onClick={() => setTapMode((v) => !v)}
+          disabled={processing}
+          className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
+          aria-label="Tap to identify"
+        >
+          <span
+            className={`w-14 h-14 rounded-full flex items-center justify-center border ${
+              tapMode
+                ? "bg-yellow-400 text-neutral-950 border-yellow-300"
+                : "bg-neutral-800 text-yellow-400 border-neutral-700"
+            }`}
+          >
+            <Hand className="w-6 h-6" />
+          </span>
+          <span className={tapMode ? "text-yellow-400 font-medium" : "text-neutral-300"}>
+            {tapMode ? "Tap on" : "Tap"}
+          </span>
+        </button>
+
         <button
           onClick={handleAutoScan}
           disabled={processing}
@@ -421,6 +441,7 @@ function AnnotatePage() {
           </span>
           Auto-detect
         </button>
+
 
         {speechSupported ? (
           <button
