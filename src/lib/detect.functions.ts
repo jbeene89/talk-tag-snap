@@ -264,7 +264,7 @@ export const identifyAtPoint = createServerFn({ method: "POST" })
 
       const json = await res.json();
       const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
-      const box = parsed.box && typeof parsed.box.x === "number" ? parsed.box : null;
+      const box = extractBox(parsed);
       return { box, label: parsed.label || "" };
     } catch (err) {
       console.error("identifyAtPoint failed", err);
