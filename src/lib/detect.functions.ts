@@ -162,11 +162,12 @@ export const scanObjects = createServerFn({ method: "POST" })
     const base64 = data.imageBase64.includes(",") ? data.imageBase64.split(",")[1] : data.imageBase64;
 
     const system =
-      "You identify the notable distinct objects, equipment, devices, fixtures, or items in a photo. " +
+      "You identify notable distinct objects, equipment, devices, fixtures, products, containers, tools, or items visible in a photo. " +
       'Return ONLY a compact JSON object: {"items":[{"label": string, "box": {"x": number, "y": number, "w": number, "h": number}}]} ' +
       "where x,y,w,h are normalized 0..1 coordinates of a tight bounding box around the object. " +
-      "Use short, specific labels (2-4 words). Return at most 8 items, prioritizing the most prominent. " +
-      "Skip background, walls, floor, sky. No prose, no markdown.";
+      "Use short specific labels (2-4 words). Return up to 8 items, prioritizing the most prominent. " +
+      "Always return at least one item if any foreground object is visible — even a single product, bottle, tool, or part counts. " +
+      "Only skip pure background (walls, floor, sky, ceiling). No prose, no markdown.";
 
     try {
       const res = await callGateway(apiKey, {
@@ -176,7 +177,7 @@ export const scanObjects = createServerFn({ method: "POST" })
           {
             role: "user",
             content: [
-              { type: "text", text: "Identify the notable objects in this photo." },
+              { type: "text", text: "Identify the notable foreground objects in this photo. Return at least one if anything is visible." },
               { type: "image_url", image_url: { url: `data:${data.mimeType};base64,${base64}` } },
             ],
           },
@@ -190,8 +191,11 @@ export const scanObjects = createServerFn({ method: "POST" })
       }
 
       const json = await res.json();
-      const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
-      const rawItems: any[] = Array.isArray(parsed) ? parsed : parsed.items ?? [];
+      const content = json?.choices?.[0]?.message?.content ?? "";
+      const parsed = parseJson(content) ?? {};
+      const rawItems: any[] = Array.isArray(parsed)
+        ? parsed
+        : parsed.items ?? parsed.objects ?? parsed.detections ?? [];
       const items = rawItems
         .map((it) => {
           if (!it || typeof it.label !== "string") return null;
@@ -200,6 +204,9 @@ export const scanObjects = createServerFn({ method: "POST" })
           return { label: String(it.label).slice(0, 40), box };
         })
         .filter((it): it is { label: string; box: Box } => it !== null);
+      if (items.length === 0) {
+        console.error("scan returned no items. raw content:", content.slice(0, 1000));
+      }
       return { items };
     } catch (err) {
       console.error("scan failed", err);
