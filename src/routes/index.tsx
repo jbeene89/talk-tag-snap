@@ -124,6 +124,37 @@ function AnnotatePage() {
     setAnnotations((prev) => prev.filter((a) => a.id !== id));
   };
 
+  const handleAutoScan = async () => {
+    if (!imageDataUrl || processing) return;
+    setProcessing(true);
+    setError(null);
+    setTranscript("scanning photo");
+    try {
+      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
+      const result = await scan({ data: { imageBase64: imageDataUrl, mimeType: mime } });
+      if (result.error) setError(result.error);
+      if (!result.items.length) {
+        setError((prev) => prev ?? "Couldn't identify any objects. Try voice mode instead.");
+      } else {
+        setAnnotations((prev) => [
+          ...prev,
+          ...result.items.map((it, i) => ({
+            id: `auto-${Date.now()}-${i}`,
+            label: it.label,
+            box: it.box,
+          })),
+        ]);
+        setTranscript("");
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Something went wrong. Try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+
   const reset = () => {
     setImageDataUrl(null);
     setImageSize(null);
