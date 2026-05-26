@@ -328,12 +328,20 @@ function AnnotatePage() {
       </header>
 
       <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
-        <div className="relative max-h-full max-w-full">
+        <div
+          onClick={handleImageTap}
+          className={`relative max-h-full max-w-full ${tapMode ? "cursor-crosshair" : ""}`}
+          style={tapMode ? { touchAction: "manipulation" } : undefined}
+        >
           <img
             src={imageDataUrl}
             alt="Captured"
-            className="block max-h-[calc(100vh-220px)] max-w-full object-contain"
+            className="block max-h-[calc(100vh-260px)] max-w-full object-contain select-none pointer-events-none"
+            draggable={false}
           />
+          {tapMode && (
+            <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
+          )}
           {/* Boxes overlay (positioned by % over the image) */}
           <div className="absolute inset-0 pointer-events-none">
             {annotations.map((a) =>
@@ -357,6 +365,8 @@ function AnnotatePage() {
           </div>
         </div>
       </div>
+
+
 
       {/* Status / transcript / errors */}
       <div className="px-4 pt-2 min-h-[2rem] text-center text-sm">
