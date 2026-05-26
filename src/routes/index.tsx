@@ -283,14 +283,14 @@ function AnnotatePage() {
           type="file"
           accept="image/*"
           capture="environment"
-          data-testid="photo-input"
-          className="absolute opacity-0 w-px h-px"
+          className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) handleFile(f);
             e.target.value = "";
           }}
         />
+
 
       </div>
     );
