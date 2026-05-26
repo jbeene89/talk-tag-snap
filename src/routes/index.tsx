@@ -327,7 +327,8 @@ function AnnotatePage() {
       <div className="px-4 pt-2 min-h-[2rem] text-center text-sm">
         {processing && (
           <span className="inline-flex items-center gap-2 text-neutral-300">
-            <Loader2 className="w-4 h-4 animate-spin" /> Finding "{transcript}"…
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {transcript === "scanning photo" ? "Scanning photo…" : `Finding "${transcript}"…`}
           </span>
         )}
         {!processing && listening && (
