@@ -23,6 +23,9 @@ type Annotation = {
 function AnnotatePage() {
   const detect = useServerFn(detectBoundingBox);
   const scan = useServerFn(scanObjects);
+  const identify = useServerFn(identifyAtPoint);
+  const [tapMode, setTapMode] = useState(false);
+
 
 
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
