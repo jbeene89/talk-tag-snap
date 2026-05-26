@@ -355,8 +355,20 @@ function AnnotatePage() {
         </div>
       )}
 
-      {/* Mic button */}
-      <div className="px-4 pt-2 pb-6 flex justify-center">
+      {/* Action row: auto-detect + mic */}
+      <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+        <button
+          onClick={handleAutoScan}
+          disabled={processing}
+          className="flex flex-col items-center gap-1 text-xs text-neutral-300 disabled:opacity-40 active:text-white"
+          aria-label="Auto-detect everything"
+        >
+          <span className="w-14 h-14 rounded-full bg-neutral-800 flex items-center justify-center border border-neutral-700">
+            <Sparkles className="w-6 h-6 text-yellow-400" />
+          </span>
+          Auto-detect
+        </button>
+
         {speechSupported ? (
           <button
             onClick={startListening}
@@ -374,6 +386,7 @@ function AnnotatePage() {
           <TypeFallback onSubmit={handleDetect} disabled={processing} />
         )}
       </div>
+
     </div>
   );
 }
