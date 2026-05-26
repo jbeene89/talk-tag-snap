@@ -290,6 +290,8 @@ function AnnotatePage() {
             e.target.value = "";
           }}
         />
+
+
       </div>
     );
   }

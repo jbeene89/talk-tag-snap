@@ -57,6 +57,49 @@ function gatewayErrorMessage(status: number) {
   return `AI error (${status})`;
 }
 
+// Normalize any of the box shapes Gemini might return into {x, y, w, h} in 0..1.
+// Supports:
+//   {x, y, w, h}                         (our requested shape)
+//   {x, y, width, height}
+//   {x1, y1, x2, y2}                     (corners)
+//   [ymin, xmin, ymax, xmax]             (Gemini "box_2d", values 0..1 or 0..1000)
+function normalizeBox(raw: any): Box | null {
+  if (!raw) return null;
+  let x: number, y: number, w: number, h: number;
+  if (Array.isArray(raw) && raw.length >= 4) {
+    let [ymin, xmin, ymax, xmax] = raw.slice(0, 4).map(Number);
+    if ([ymin, xmin, ymax, xmax].some((n) => !Number.isFinite(n))) return null;
+    const max = Math.max(ymin, xmin, ymax, xmax);
+    if (max > 1) {
+      ymin /= 1000; xmin /= 1000; ymax /= 1000; xmax /= 1000;
+    }
+    x = xmin; y = ymin; w = xmax - xmin; h = ymax - ymin;
+  } else if (typeof raw === "object") {
+    if (typeof raw.x === "number" && typeof raw.y === "number" && typeof raw.w === "number" && typeof raw.h === "number") {
+      ({ x, y, w, h } = raw);
+    } else if (typeof raw.x === "number" && typeof raw.y === "number" && typeof raw.width === "number" && typeof raw.height === "number") {
+      x = raw.x; y = raw.y; w = raw.width; h = raw.height;
+    } else if (typeof raw.x1 === "number" && typeof raw.y1 === "number" && typeof raw.x2 === "number" && typeof raw.y2 === "number") {
+      x = raw.x1; y = raw.y1; w = raw.x2 - raw.x1; h = raw.y2 - raw.y1;
+    } else return null;
+    const max = Math.max(x, y, x + w, y + h);
+    if (max > 1.5) { x /= 1000; y /= 1000; w /= 1000; h /= 1000; }
+  } else return null;
+  // clamp
+  x = Math.max(0, Math.min(1, x));
+  y = Math.max(0, Math.min(1, y));
+  w = Math.max(0, Math.min(1 - x, w));
+  h = Math.max(0, Math.min(1 - y, h));
+  if (w <= 0 || h <= 0) return null;
+  return { x, y, w, h };
+}
+
+function extractBox(parsed: any): Box | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  return normalizeBox(parsed.box ?? parsed.box_2d ?? parsed.bbox ?? parsed.bounding_box ?? null);
+}
+
+
 export const detectBoundingBox = createServerFn({ method: "POST" })
   .inputValidator((data: DetectInput) => {
     if (!data || typeof data.imageBase64 !== "string" || typeof data.phrase !== "string") {
@@ -99,7 +142,7 @@ export const detectBoundingBox = createServerFn({ method: "POST" })
 
       const json = await res.json();
       const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
-      const box = parsed.box && typeof parsed.box.x === "number" ? parsed.box : null;
+      const box = extractBox(parsed);
       return { box, label: parsed.label || data.phrase };
     } catch (err) {
       console.error("detect failed", err);
@@ -150,8 +193,13 @@ export const scanObjects = createServerFn({ method: "POST" })
       const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
       const rawItems: any[] = Array.isArray(parsed) ? parsed : parsed.items ?? [];
       const items = rawItems
-        .filter((it) => it && it.box && typeof it.box.x === "number" && typeof it.label === "string")
-        .map((it) => ({ label: String(it.label).slice(0, 40), box: it.box as Box }));
+        .map((it) => {
+          if (!it || typeof it.label !== "string") return null;
+          const box = extractBox(it);
+          if (!box) return null;
+          return { label: String(it.label).slice(0, 40), box };
+        })
+        .filter((it): it is { label: string; box: Box } => it !== null);
       return { items };
     } catch (err) {
       console.error("scan failed", err);
@@ -221,7 +269,7 @@ export const identifyAtPoint = createServerFn({ method: "POST" })
 
       const json = await res.json();
       const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
-      const box = parsed.box && typeof parsed.box.x === "number" ? parsed.box : null;
+      const box = extractBox(parsed);
       return { box, label: parsed.label || "" };
     } catch (err) {
       console.error("identifyAtPoint failed", err);
