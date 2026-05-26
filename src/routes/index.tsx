@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2 } from "lucide-react";
-import { detectBoundingBox } from "@/lib/detect.functions";
+import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2, Sparkles } from "lucide-react";
+import { detectBoundingBox, scanObjects } from "@/lib/detect.functions";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -22,6 +22,8 @@ type Annotation = {
 
 function AnnotatePage() {
   const detect = useServerFn(detectBoundingBox);
+  const scan = useServerFn(scanObjects);
+
 
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
@@ -121,6 +123,37 @@ function AnnotatePage() {
   const removeAnnotation = (id: string) => {
     setAnnotations((prev) => prev.filter((a) => a.id !== id));
   };
+
+  const handleAutoScan = async () => {
+    if (!imageDataUrl || processing) return;
+    setProcessing(true);
+    setError(null);
+    setTranscript("scanning photo");
+    try {
+      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
+      const result = await scan({ data: { imageBase64: imageDataUrl, mimeType: mime } });
+      if (result.error) setError(result.error);
+      if (!result.items.length) {
+        setError((prev) => prev ?? "Couldn't identify any objects. Try voice mode instead.");
+      } else {
+        setAnnotations((prev) => [
+          ...prev,
+          ...result.items.map((it, i) => ({
+            id: `auto-${Date.now()}-${i}`,
+            label: it.label,
+            box: it.box,
+          })),
+        ]);
+        setTranscript("");
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Something went wrong. Try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
 
   const reset = () => {
     setImageDataUrl(null);
@@ -294,7 +327,8 @@ function AnnotatePage() {
       <div className="px-4 pt-2 min-h-[2rem] text-center text-sm">
         {processing && (
           <span className="inline-flex items-center gap-2 text-neutral-300">
-            <Loader2 className="w-4 h-4 animate-spin" /> Finding "{transcript}"…
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {transcript === "scanning photo" ? "Scanning photo…" : `Finding "${transcript}"…`}
           </span>
         )}
         {!processing && listening && (
@@ -322,8 +356,20 @@ function AnnotatePage() {
         </div>
       )}
 
-      {/* Mic button */}
-      <div className="px-4 pt-2 pb-6 flex justify-center">
+      {/* Action row: auto-detect + mic */}
+      <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+        <button
+          onClick={handleAutoScan}
+          disabled={processing}
+          className="flex flex-col items-center gap-1 text-xs text-neutral-300 disabled:opacity-40 active:text-white"
+          aria-label="Auto-detect everything"
+        >
+          <span className="w-14 h-14 rounded-full bg-neutral-800 flex items-center justify-center border border-neutral-700">
+            <Sparkles className="w-6 h-6 text-yellow-400" />
+          </span>
+          Auto-detect
+        </button>
+
         {speechSupported ? (
           <button
             onClick={startListening}
@@ -341,6 +387,7 @@ function AnnotatePage() {
           <TypeFallback onSubmit={handleDetect} disabled={processing} />
         )}
       </div>
+
     </div>
   );
 }
