@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2, Sparkles } from "lucide-react";
-import { detectBoundingBox, scanObjects } from "@/lib/detect.functions";
+import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2, Sparkles, Hand } from "lucide-react";
+import { detectBoundingBox, scanObjects, identifyAtPoint } from "@/lib/detect.functions";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -23,6 +23,9 @@ type Annotation = {
 function AnnotatePage() {
   const detect = useServerFn(detectBoundingBox);
   const scan = useServerFn(scanObjects);
+  const identify = useServerFn(identifyAtPoint);
+  const [tapMode, setTapMode] = useState(false);
+
 
 
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
@@ -153,6 +156,38 @@ function AnnotatePage() {
       setProcessing(false);
     }
   };
+
+  const handleImageTap = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tapMode || !imageDataUrl || processing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    setProcessing(true);
+    setError(null);
+    setTranscript("identifying tapped object");
+    try {
+      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
+      const result = await identify({ data: { imageBase64: imageDataUrl, mimeType: mime, point: { x, y } } });
+      if (result.error) setError(result.error);
+      if (!result.box || !result.label) {
+        setError((prev) => prev ?? "Couldn't identify anything there. Try tapping more on the object.");
+      } else {
+        setAnnotations((prev) => [
+          ...prev,
+          { id: `tap-${Date.now()}`, label: result.label, box: result.box },
+        ]);
+        setTranscript("");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+
 
 
   const reset = () => {
@@ -293,12 +328,20 @@ function AnnotatePage() {
       </header>
 
       <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
-        <div className="relative max-h-full max-w-full">
+        <div
+          onClick={handleImageTap}
+          className={`relative max-h-full max-w-full ${tapMode ? "cursor-crosshair" : ""}`}
+          style={tapMode ? { touchAction: "manipulation" } : undefined}
+        >
           <img
             src={imageDataUrl}
             alt="Captured"
-            className="block max-h-[calc(100vh-220px)] max-w-full object-contain"
+            className="block max-h-[calc(100vh-260px)] max-w-full object-contain select-none pointer-events-none"
+            draggable={false}
           />
+          {tapMode && (
+            <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
+          )}
           {/* Boxes overlay (positioned by % over the image) */}
           <div className="absolute inset-0 pointer-events-none">
             {annotations.map((a) =>
@@ -323,18 +366,27 @@ function AnnotatePage() {
         </div>
       </div>
 
+
+
       {/* Status / transcript / errors */}
       <div className="px-4 pt-2 min-h-[2rem] text-center text-sm">
         {processing && (
           <span className="inline-flex items-center gap-2 text-neutral-300">
             <Loader2 className="w-4 h-4 animate-spin" />
-            {transcript === "scanning photo" ? "Scanning photo…" : `Finding "${transcript}"…`}
+            {transcript === "scanning photo"
+              ? "Scanning photo…"
+              : transcript === "identifying tapped object"
+                ? "Identifying object…"
+                : `Finding "${transcript}"…`}
           </span>
         )}
-        {!processing && listening && (
+        {!processing && tapMode && !error && (
+          <span className="text-yellow-400 font-medium">Tap on the object to identify it</span>
+        )}
+        {!processing && !tapMode && listening && (
           <span className="text-yellow-400 font-medium">Listening… say what to highlight</span>
         )}
-        {!processing && !listening && transcript && (
+        {!processing && !tapMode && !listening && transcript && transcript !== "scanning photo" && transcript !== "identifying tapped object" && (
           <span className="text-neutral-400">Heard: "{transcript}"</span>
         )}
         {error && <div className="text-red-400 mt-1">{error}</div>}
@@ -356,8 +408,28 @@ function AnnotatePage() {
         </div>
       )}
 
-      {/* Action row: auto-detect + mic */}
+      {/* Action row: tap + auto-detect + mic */}
       <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+        <button
+          onClick={() => setTapMode((v) => !v)}
+          disabled={processing}
+          className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
+          aria-label="Tap to identify"
+        >
+          <span
+            className={`w-14 h-14 rounded-full flex items-center justify-center border ${
+              tapMode
+                ? "bg-yellow-400 text-neutral-950 border-yellow-300"
+                : "bg-neutral-800 text-yellow-400 border-neutral-700"
+            }`}
+          >
+            <Hand className="w-6 h-6" />
+          </span>
+          <span className={tapMode ? "text-yellow-400 font-medium" : "text-neutral-300"}>
+            {tapMode ? "Tap on" : "Tap"}
+          </span>
+        </button>
+
         <button
           onClick={handleAutoScan}
           disabled={processing}
@@ -369,6 +441,7 @@ function AnnotatePage() {
           </span>
           Auto-detect
         </button>
+
 
         {speechSupported ? (
           <button
