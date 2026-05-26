@@ -373,13 +373,20 @@ function AnnotatePage() {
         {processing && (
           <span className="inline-flex items-center gap-2 text-neutral-300">
             <Loader2 className="w-4 h-4 animate-spin" />
-            {transcript === "scanning photo" ? "Scanning photo…" : `Finding "${transcript}"…`}
+            {transcript === "scanning photo"
+              ? "Scanning photo…"
+              : transcript === "identifying tapped object"
+                ? "Identifying object…"
+                : `Finding "${transcript}"…`}
           </span>
         )}
-        {!processing && listening && (
+        {!processing && tapMode && !error && (
+          <span className="text-yellow-400 font-medium">Tap on the object to identify it</span>
+        )}
+        {!processing && !tapMode && listening && (
           <span className="text-yellow-400 font-medium">Listening… say what to highlight</span>
         )}
-        {!processing && !listening && transcript && (
+        {!processing && !tapMode && !listening && transcript && transcript !== "scanning photo" && transcript !== "identifying tapped object" && (
           <span className="text-neutral-400">Heard: "{transcript}"</span>
         )}
         {error && <div className="text-red-400 mt-1">{error}</div>}
