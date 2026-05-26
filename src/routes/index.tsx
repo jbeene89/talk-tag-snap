@@ -157,6 +157,38 @@ function AnnotatePage() {
     }
   };
 
+  const handleImageTap = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tapMode || !imageDataUrl || processing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    setProcessing(true);
+    setError(null);
+    setTranscript("identifying tapped object");
+    try {
+      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
+      const result = await identify({ data: { imageBase64: imageDataUrl, mimeType: mime, point: { x, y } } });
+      if (result.error) setError(result.error);
+      if (!result.box || !result.label) {
+        setError((prev) => prev ?? "Couldn't identify anything there. Try tapping more on the object.");
+      } else {
+        setAnnotations((prev) => [
+          ...prev,
+          { id: `tap-${Date.now()}`, label: result.label, box: result.box },
+        ]);
+        setTranscript("");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+
+
 
   const reset = () => {
     setImageDataUrl(null);
