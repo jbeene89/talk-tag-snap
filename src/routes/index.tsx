@@ -6,7 +6,6 @@ import {
   Mic,
   Download,
   Share2,
-  X,
   RotateCcw,
   Loader2,
   Sparkles,
