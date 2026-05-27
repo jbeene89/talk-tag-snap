@@ -677,6 +677,7 @@ function AnnotatePage() {
     try {
       recognitionRef.current.start();
       setListening(true);
+      wasListeningRef.current = true;
     } catch {
       // already started
     }
@@ -684,6 +685,7 @@ function AnnotatePage() {
 
   const stopListening = () => {
     if (!recognitionRef.current || !listening) return;
+    wasListeningRef.current = false;
     try {
       recognitionRef.current.stop();
     } catch {}
