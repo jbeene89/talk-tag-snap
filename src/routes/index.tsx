@@ -363,7 +363,14 @@ function AnnotatePage() {
     const pos = getContainerPos(e.clientX, e.clientY);
     if (!pos) return;
     setSelectedId(id);
-    moveRef.current = { kind, id, startBox: { ...box }, startPos: pos };
+    moveRef.current = {
+      kind,
+      id,
+      startBox: { ...box },
+      startPos: pos,
+      snapshot: annotations,
+      moved: false,
+    };
   };
 
   const onBoxDragMove = (e: React.PointerEvent) => {
@@ -373,6 +380,8 @@ function AnnotatePage() {
     if (!pos) return;
     const dx = pos.x - m.startPos.x;
     const dy = pos.y - m.startPos.y;
+    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) m.moved = true;
+
     setAnnotations((prev) =>
       prev.map((a) => {
         if (a.id !== m.id) return a;
