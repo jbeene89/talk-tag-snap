@@ -713,6 +713,7 @@ function AnnotatePage() {
     setError(null);
     setTapMode(false);
     setBoxMode(false);
+    setZoom({ s: 1, x: 0, y: 0 });
   };
 
   // ---- Export ----
