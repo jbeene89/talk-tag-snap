@@ -585,15 +585,17 @@ function AnnotatePage() {
   const exportImage = async (share: boolean) => {
     if (!imageDataUrl || !imageSize) return;
     // Auto-save any in-progress caption first
-    let exportList = annotations;
+    flushCaptionDraft();
+    const exportList = selectedId
+      ? annotations.map((a) =>
+          a.id === selectedId ? { ...a, label: captionDraft.trim() } : a,
+        )
+      : annotations;
     if (selectedId) {
-      exportList = annotations.map((a) =>
-        a.id === selectedId ? { ...a, label: captionDraft.trim() } : a,
-      );
-      setAnnotations(exportList);
       setSelectedId(null);
       setCaptionDraft("");
     }
+
 
     const canvas = document.createElement("canvas");
     canvas.width = imageSize.w;
