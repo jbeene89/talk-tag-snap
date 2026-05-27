@@ -348,22 +348,7 @@ function AnnotatePage() {
       if (!result.items.length) {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
       } else {
-        // Add all boxes with blank labels — user captions each one.
-        const newOnes: Annotation[] = result.items.map((it, i) => ({
-          id: `auto-${Date.now()}-${i}`,
-          label: "",
-          box: it.box,
-          severity: "minor",
-        }));
-        setAnnotations((prev) => {
-          commit(prev);
-          return [...prev, ...newOnes];
-        });
-
-        // Select the first new one for captioning
-        setSelectedId(newOnes[0].id);
-        setCaptionDraft("");
-        requestAnimationFrame(() => captionInputRef.current?.focus());
+        setScanPreview(result.items);
       }
     } catch (e) {
       console.error(e);
@@ -373,6 +358,30 @@ function AnnotatePage() {
       setBusyText("");
     }
   };
+
+  const addScanItem = (item: { label: string; box: Box }) => {
+    addAnnotationAndSelect(item.box);
+    setCaptionDraft(item.label);
+    setScanPreview((prev) => (prev ? prev.filter((p) => p !== item) : null));
+  };
+
+  const addAllScanItems = () => {
+    if (!scanPreview?.length) return;
+    const toAdd = scanPreview;
+    setAnnotations((prev) => {
+      commit(prev);
+      const newOnes: Annotation[] = toAdd.map((it, i) => ({
+        id: `auto-${Date.now()}-${i}`,
+        label: it.label,
+        box: it.box,
+        severity: "minor",
+      }));
+      return [...prev, ...newOnes];
+    });
+    setScanPreview(null);
+  };
+
+  const dismissScanPreview = () => setScanPreview(null);
 
   const handleImageTap = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!tapMode || !imageDataUrl || processing) return;
