@@ -36,13 +36,38 @@ export const Route = createFileRoute("/")({
 });
 
 type Box = { x: number; y: number; w: number; h: number };
+type Severity = "info" | "minor" | "major";
 type Annotation = {
   id: string;
   label: string;
   box: Box;
+  severity?: Severity;
 };
 
 type DragKind = "move" | "nw" | "ne" | "sw" | "se" | null;
+
+// Tailwind colors mapped per severity. Used for box border, badge bg, and canvas export.
+const SEV_HEX: Record<Severity, string> = {
+  info: "#38bdf8", // sky-400
+  minor: "#facc15", // yellow-400
+  major: "#ef4444", // red-500
+};
+const SEV_BORDER: Record<Severity, string> = {
+  info: "border-sky-400",
+  minor: "border-yellow-400",
+  major: "border-red-500",
+};
+const SEV_BG: Record<Severity, string> = {
+  info: "bg-sky-400",
+  minor: "bg-yellow-400",
+  major: "bg-red-500",
+};
+const SEV_TEXT: Record<Severity, string> = {
+  info: "text-neutral-950",
+  minor: "text-neutral-950",
+  major: "text-white",
+};
+const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
 function AnnotatePage() {
   const scan = useServerFn(scanObjects);
@@ -141,6 +166,77 @@ function AnnotatePage() {
 
   const [copied, setCopied] = useState(false);
 
+  // ---- Pinch-zoom on the photo ----
+  const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0 });
+  const zoomViewportRef = useRef<HTMLDivElement>(null);
+  const pinchRef = useRef<
+    | null
+    | {
+        startDist: number;
+        startScale: number;
+        startX: number;
+        startY: number;
+        focalX: number;
+        focalY: number;
+      }
+  >(null);
+  // Voice auto-advance: when caption is saved while mic was on, jump to next unlabeled box and re-arm mic
+  const wasListeningRef = useRef(false);
+  const autoAdvanceRef = useRef(false);
+
+  // Pinch gesture handlers — attached natively so we can preventDefault and beat the page-zoom behavior
+  useEffect(() => {
+    const el = zoomViewportRef.current;
+    if (!el) return;
+    const clamp = (s: number) => Math.max(1, Math.min(5, s));
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      e.preventDefault();
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const rect = el.getBoundingClientRect();
+      pinchRef.current = {
+        startDist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+        startScale: zoom.s,
+        startX: zoom.x,
+        startY: zoom.y,
+        focalX: (a.clientX + b.clientX) / 2 - rect.left,
+        focalY: (a.clientY + b.clientY) / 2 - rect.top,
+      };
+    };
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !pinchRef.current) return;
+      e.preventDefault();
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const p = pinchRef.current;
+      const newScale = clamp((dist / p.startDist) * p.startScale);
+      const k = newScale / p.startScale;
+      // Zoom around the original focal point
+      const nx = p.focalX - (p.focalX - p.startX) * k;
+      const ny = p.focalY - (p.focalY - p.startY) * k;
+      setZoom({ s: newScale, x: nx, y: ny });
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinchRef.current = null;
+        // Snap back if essentially 1x
+        setZoom((z) => (z.s <= 1.02 ? { s: 1, x: 0, y: 0 } : z));
+      }
+    };
+    el.addEventListener("touchstart", onStart, { passive: false });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [zoom.s, zoom.x, zoom.y, imageDataUrl]);
+
+  const resetZoom = () => setZoom({ s: 1, x: 0, y: 0 });
+
   const handleFile = (file: File) => {
     setError(null);
     setAnnotations([]);
@@ -148,6 +244,7 @@ function AnnotatePage() {
     setFuture([]);
     setSelectedId(null);
     setCaptionDraft("");
+    setZoom({ s: 1, x: 0, y: 0 });
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -226,7 +323,7 @@ function AnnotatePage() {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       setAnnotations((prev) => {
         commit(prev);
-        return [...prev, { id, label: "", box }];
+        return [...prev, { id, label: "", box, severity: "minor" }];
       });
       setSelectedId(id);
       setCaptionDraft("");
@@ -250,10 +347,11 @@ function AnnotatePage() {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
       } else {
         // Add all boxes with blank labels — user captions each one.
-        const newOnes = result.items.map((it, i) => ({
+        const newOnes: Annotation[] = result.items.map((it, i) => ({
           id: `auto-${Date.now()}-${i}`,
           label: "",
           box: it.box,
+          severity: "minor",
         }));
         setAnnotations((prev) => {
           commit(prev);
@@ -478,13 +576,38 @@ function AnnotatePage() {
   const saveCaption = () => {
     if (!selectedId) return;
     const newLabel = captionDraft.trim();
+    const currentId = selectedId;
+    const wantsContinue = wasListeningRef.current;
+    let nextId: string | null = null;
     setAnnotations((prev) => {
-      const target = prev.find((a) => a.id === selectedId);
+      const target = prev.find((a) => a.id === currentId);
       if (target && target.label !== newLabel) commit(prev);
-      return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
+      const updated = prev.map((a) => (a.id === currentId ? { ...a, label: newLabel } : a));
+      // Find next annotation (in order) with an empty label
+      const idx = updated.findIndex((a) => a.id === currentId);
+      const after = updated.slice(idx + 1).concat(updated.slice(0, idx));
+      const next = after.find((a) => !a.label?.trim());
+      nextId = next?.id ?? null;
+      return updated;
     });
-    setSelectedId(null);
-    setCaptionDraft("");
+    if (nextId) {
+      setSelectedId(nextId);
+      setCaptionDraft("");
+      requestAnimationFrame(() => captionInputRef.current?.focus());
+      if (wantsContinue) {
+        // Restart mic on the next box
+        setTimeout(() => {
+          try {
+            recognitionRef.current?.start();
+            setListening(true);
+          } catch {}
+        }, 250);
+      }
+    } else {
+      setSelectedId(null);
+      setCaptionDraft("");
+      wasListeningRef.current = false;
+    }
   };
 
   const deleteSelected = () => {
@@ -510,6 +633,16 @@ function AnnotatePage() {
       return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
     });
   }, [selectedId, captionDraft, commit]);
+
+  const setSeverity = (sev: Severity) => {
+    if (!selectedId) return;
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (!target || sevOf(target) === sev) return prev;
+      commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, severity: sev } : a));
+    });
+  };
 
   const selectExisting = (id: string) => {
     if (tapMode || boxMode) return;
@@ -554,6 +687,7 @@ function AnnotatePage() {
     try {
       recognitionRef.current.start();
       setListening(true);
+      wasListeningRef.current = true;
     } catch {
       // already started
     }
@@ -561,6 +695,7 @@ function AnnotatePage() {
 
   const stopListening = () => {
     if (!recognitionRef.current || !listening) return;
+    wasListeningRef.current = false;
     try {
       recognitionRef.current.stop();
     } catch {}
@@ -578,6 +713,7 @@ function AnnotatePage() {
     setError(null);
     setTapMode(false);
     setBoxMode(false);
+    setZoom({ s: 1, x: 0, y: 0 });
   };
 
   // ---- Export ----
@@ -618,16 +754,18 @@ function AnnotatePage() {
       const y = a.box.y * imageSize.h;
       const w = a.box.w * imageSize.w;
       const h = a.box.h * imageSize.h;
-      ctx.strokeStyle = "#facc15";
+      const sev = sevOf(a);
+      const color = SEV_HEX[sev];
+      ctx.strokeStyle = color;
       ctx.strokeRect(x, y, w, h);
       const label = `${i + 1}. ${a.label?.trim() || "(no description)"}`;
       const pad = fontSize * 0.4;
       const textW = ctx.measureText(label).width + pad * 2;
       const textH = fontSize + pad * 1.2;
       const ty = y - textH < 0 ? y + strokeW : y - textH;
-      ctx.fillStyle = "#facc15";
+      ctx.fillStyle = color;
       ctx.fillRect(x, ty, textW, textH);
-      ctx.fillStyle = "#111827";
+      ctx.fillStyle = sev === "major" ? "#ffffff" : "#111827";
       ctx.fillText(label, x + pad, ty + pad * 0.6);
     });
 
@@ -762,7 +900,18 @@ function AnnotatePage() {
 
       </header>
 
-      <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
+      <div
+        ref={zoomViewportRef}
+        className="relative flex-1 flex items-center justify-center bg-black overflow-hidden"
+        style={{ touchAction: zoom.s > 1 ? "none" : undefined }}
+      >
+        <div
+          style={{
+            transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
+            transformOrigin: "0 0",
+            transition: pinchRef.current ? "none" : "transform 0.15s ease-out",
+          }}
+        >
         <div
           ref={imageContainerRef}
           onClick={boxMode ? undefined : handleImageTap}
@@ -807,10 +956,11 @@ function AnnotatePage() {
           <div className="absolute inset-0">
             {annotations.map((a, i) => {
               const isSelected = a.id === selectedId;
+              const sev = sevOf(a);
               return (
                 <div
                   key={a.id}
-                  className={`absolute ${isSelected ? "border-2 border-yellow-300 bg-yellow-400/10" : "border-[3px] border-yellow-400"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
+                  className={`absolute ${SEV_BORDER[sev]} ${isSelected ? "border-2 bg-white/5" : "border-[3px]"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
                   style={{
                     left: `${a.box.x * 100}%`,
                     top: `${a.box.y * 100}%`,
@@ -828,11 +978,11 @@ function AnnotatePage() {
                   }}
                 >
                   <span className="absolute -top-6 left-0 flex items-center gap-1 pointer-events-none">
-                    <span className="bg-yellow-400 text-neutral-950 text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow">
+                    <span className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow`}>
                       {i + 1}
                     </span>
                     {a.label && (
-                      <span className="bg-yellow-400 text-neutral-950 text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate">
+                      <span className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate`}>
                         {a.label}
                       </span>
                     )}
@@ -861,6 +1011,15 @@ function AnnotatePage() {
             })}
           </div>
         </div>
+        </div>
+        {zoom.s > 1 && (
+          <button
+            onClick={resetZoom}
+            className="absolute top-2 right-2 px-2.5 py-1 rounded-md bg-neutral-900/80 border border-neutral-700 text-xs text-yellow-400 backdrop-blur-sm"
+          >
+            Reset zoom
+          </button>
+        )}
       </div>
 
       {/* Status line */}
@@ -897,6 +1056,25 @@ function AnnotatePage() {
             >
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
+          </div>
+          <div className="flex gap-1.5 mb-2">
+            {(["info", "minor", "major"] as const).map((sev) => {
+              const active = selected && sevOf(selected) === sev;
+              const label = sev === "info" ? "Info" : sev === "minor" ? "Minor" : "Major";
+              return (
+                <button
+                  key={sev}
+                  onClick={() => setSeverity(sev)}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                    active
+                      ? `${SEV_BG[sev]} ${SEV_TEXT[sev]} border-transparent`
+                      : "bg-neutral-800 text-neutral-400 border-neutral-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
           <div className="flex items-center gap-2">
             <input
