@@ -191,7 +191,65 @@ function AnnotatePage() {
     }
   };
 
+  const getPointerPos = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+    };
+  };
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!boxMode || processing) return;
+    e.preventDefault();
+    (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+    const p = getPointerPos(e);
+    dragRef.current = { active: true, start: p };
+    setDrawing({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!boxMode || !dragRef.current.active || !dragRef.current.start) return;
+    const p = getPointerPos(e);
+    setDrawing({ x1: dragRef.current.start.x, y1: dragRef.current.start.y, x2: p.x, y2: p.y });
+  };
+
+  const handlePointerUp = async (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!boxMode || !dragRef.current.active || !dragRef.current.start) return;
+    dragRef.current = { active: false, start: null };
+    const d = drawing;
+    setDrawing(null);
+    if (!d || !imageDataUrl) return;
+    const x = Math.min(d.x1, d.x2);
+    const y = Math.min(d.y1, d.y2);
+    const w = Math.abs(d.x2 - d.x1);
+    const h = Math.abs(d.y2 - d.y1);
+    if (w < 0.02 || h < 0.02) return; // too small, treat as accidental tap
+    setProcessing(true);
+    setError(null);
+    setTranscript("identifying boxed region");
+    try {
+      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
+      const result = await identifyBox({
+        data: { imageBase64: imageDataUrl, mimeType: mime, region: { x, y, w, h } },
+      });
+      if (result.error) setError(result.error);
+      if (!result.box || !result.label) {
+        setError((prev) => prev ?? "Couldn't identify anything in that box. Try drawing tighter around the object.");
+      } else {
+        setAnnotations((prev) => [
+          ...prev,
+          { id: `box-${Date.now()}`, label: result.label, box: result.box },
+        ]);
+        setTranscript("");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
 
   const reset = () => {
