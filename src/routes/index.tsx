@@ -100,6 +100,7 @@ function AnnotatePage() {
   const [scanPreview, setScanPreview] = useState<{ label: string; box: Box }[] | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
