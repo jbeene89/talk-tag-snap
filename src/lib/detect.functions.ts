@@ -115,9 +115,9 @@ export const detectBoundingBox = createServerFn({ method: "POST" })
 
     const system =
       "You locate objects in images. Given a photo and a short phrase describing something visible, return ONLY a compact JSON object: " +
-      '{"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
-      "where x,y,w,h are normalized 0..1 coordinates of the smallest tight rectangle around the described object. " +
-      'If the object is not visible, return {"label": <phrase>, "box": null}. No prose, no markdown.';
+      '{"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin). " +
+      'If the object is not visible, return {"label": <phrase>, "box_2d": null}. No prose, no markdown.';
 
     try {
       const res = await callGateway(apiKey, {
