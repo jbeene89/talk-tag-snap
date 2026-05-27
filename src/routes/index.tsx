@@ -323,7 +323,7 @@ function AnnotatePage() {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       setAnnotations((prev) => {
         commit(prev);
-        return [...prev, { id, label: "", box }];
+        return [...prev, { id, label: "", box, severity: "minor" }];
       });
       setSelectedId(id);
       setCaptionDraft("");
