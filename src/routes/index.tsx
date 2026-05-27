@@ -347,10 +347,11 @@ function AnnotatePage() {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
       } else {
         // Add all boxes with blank labels — user captions each one.
-        const newOnes = result.items.map((it, i) => ({
+        const newOnes: Annotation[] = result.items.map((it, i) => ({
           id: `auto-${Date.now()}-${i}`,
           label: "",
           box: it.box,
+          severity: "minor",
         }));
         setAnnotations((prev) => {
           commit(prev);
