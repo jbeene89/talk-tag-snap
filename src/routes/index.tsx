@@ -498,14 +498,55 @@ function AnnotatePage() {
   };
 
 
+  // Flush the current caption draft into the selected annotation without
+  // clearing selection. Used before switching boxes, toggling modes, sharing.
+  const flushCaptionDraft = useCallback(() => {
+    if (!selectedId) return;
+    const newLabel = captionDraft.trim();
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (!target || target.label === newLabel) return prev;
+      commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
+    });
+  }, [selectedId, captionDraft, commit]);
+
   const selectExisting = (id: string) => {
     if (tapMode || boxMode) return;
+    flushCaptionDraft();
     const a = annotations.find((x) => x.id === id);
     if (!a) return;
     setSelectedId(id);
     setCaptionDraft(a.label);
     requestAnimationFrame(() => captionInputRef.current?.focus());
   };
+
+  const deselect = () => {
+    flushCaptionDraft();
+    setSelectedId(null);
+    setCaptionDraft("");
+  };
+
+  const copyAsText = async () => {
+    if (annotations.length === 0) return;
+    flushCaptionDraft();
+    // Read fresh annotations after flush via functional update
+    setAnnotations((curr) => {
+      const lines = curr.map(
+        (a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`,
+      );
+      const text = lines.join("\n");
+      navigator.clipboard
+        ?.writeText(text)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        })
+        .catch(() => setError("Couldn't copy to clipboard."));
+      return curr;
+    });
+  };
+
 
   const startListening = () => {
     if (!recognitionRef.current || listening || processing) return;
