@@ -341,7 +341,10 @@ function AnnotatePage() {
     id: string | null;
     startBox: Box | null;
     startPos: { x: number; y: number } | null;
-  }>({ kind: null, id: null, startBox: null, startPos: null });
+    snapshot: Annotation[] | null;
+    moved: boolean;
+  }>({ kind: null, id: null, startBox: null, startPos: null, snapshot: null, moved: false });
+
 
   const getContainerPos = (clientX: number, clientY: number) => {
     const rect = imageContainerRef.current?.getBoundingClientRect();
