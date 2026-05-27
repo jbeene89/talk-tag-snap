@@ -122,16 +122,80 @@ function AnnotatePage() {
     reader.readAsDataURL(file);
   };
 
+  // ---- History (undo/redo) ----
+
+  const HISTORY_LIMIT = 50;
+  const commit = useCallback((snapshot: Annotation[]) => {
+    setPast((p) => {
+      const next = [...p, snapshot];
+      if (next.length > HISTORY_LIMIT) next.shift();
+      return next;
+    });
+    setFuture([]);
+  }, []);
+
+  const undo = useCallback(() => {
+    setPast((p) => {
+      if (p.length === 0) return p;
+      const prev = p[p.length - 1];
+      setAnnotations((curr) => {
+        setFuture((f) => [...f, curr]);
+        return prev;
+      });
+      setSelectedId(null);
+      setCaptionDraft("");
+      return p.slice(0, -1);
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setFuture((f) => {
+      if (f.length === 0) return f;
+      const next = f[f.length - 1];
+      setAnnotations((curr) => {
+        setPast((p) => [...p, curr]);
+        return next;
+      });
+      setSelectedId(null);
+      setCaptionDraft("");
+      return f.slice(0, -1);
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      if (e.key === "z" || e.key === "Z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (e.key === "y" || e.key === "Y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
   // ---- Annotation creation ----
 
-  const addAnnotationAndSelect = useCallback((box: Box) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setAnnotations((prev) => [...prev, { id, label: "", box }]);
-    setSelectedId(id);
-    setCaptionDraft("");
-    // Focus caption input after sheet renders
-    requestAnimationFrame(() => captionInputRef.current?.focus());
-  }, []);
+  const addAnnotationAndSelect = useCallback(
+    (box: Box) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setAnnotations((prev) => {
+        commit(prev);
+        return [...prev, { id, label: "", box }];
+      });
+      setSelectedId(id);
+      setCaptionDraft("");
+      // Focus caption input after sheet renders
+      requestAnimationFrame(() => captionInputRef.current?.focus());
+    },
+    [commit],
+  );
+
 
   const handleAutoScan = async () => {
     if (!imageDataUrl || processing) return;
