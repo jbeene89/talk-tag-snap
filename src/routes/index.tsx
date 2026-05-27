@@ -166,6 +166,24 @@ function AnnotatePage() {
 
   const [copied, setCopied] = useState(false);
 
+  // ---- Pinch-zoom on the photo ----
+  const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0 });
+  const zoomViewportRef = useRef<HTMLDivElement>(null);
+  const pinchRef = useRef<
+    | null
+    | {
+        startDist: number;
+        startScale: number;
+        startX: number;
+        startY: number;
+        focalX: number;
+        focalY: number;
+      }
+  >(null);
+  // Voice auto-advance: when caption is saved while mic was on, jump to next unlabeled box and re-arm mic
+  const wasListeningRef = useRef(false);
+  const autoAdvanceRef = useRef(false);
+
   const handleFile = (file: File) => {
     setError(null);
     setAnnotations([]);
