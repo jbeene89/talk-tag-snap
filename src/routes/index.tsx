@@ -1121,8 +1121,7 @@ function AnnotatePage() {
             </button>
           </div>
         </div>
-      {/* Action row / scan preview */}
-      {scanPreview ? (
+      ) : scanPreview ? (
         <div className="px-4 pt-2 pb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-neutral-400">Tap to add one at a time</span>
