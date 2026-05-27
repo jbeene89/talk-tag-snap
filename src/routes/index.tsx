@@ -997,6 +997,15 @@ function AnnotatePage() {
             })}
           </div>
         </div>
+        </div>
+        {zoom.s > 1 && (
+          <button
+            onClick={resetZoom}
+            className="absolute top-2 right-2 px-2.5 py-1 rounded-md bg-neutral-900/80 border border-neutral-700 text-xs text-yellow-400 backdrop-blur-sm"
+          >
+            Reset zoom
+          </button>
+        )}
       </div>
 
       {/* Status line */}
