@@ -106,6 +106,41 @@ function AnnotatePage() {
     };
   }, []);
 
+  // ---- Persist to localStorage so a tab crash doesn't lose the inspection ----
+  const STORAGE_KEY = "soupytag:session:v1";
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data?.imageDataUrl && data?.imageSize) {
+          setImageDataUrl(data.imageDataUrl);
+          setImageSize(data.imageSize);
+          setAnnotations(Array.isArray(data.annotations) ? data.annotations : []);
+        }
+      }
+    } catch {}
+    hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      if (imageDataUrl && imageSize) {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ imageDataUrl, imageSize, annotations }),
+        );
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {}
+  }, [imageDataUrl, imageSize, annotations]);
+
+  const [copied, setCopied] = useState(false);
+
   const handleFile = (file: File) => {
     setError(null);
     setAnnotations([]);
