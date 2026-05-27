@@ -13,7 +13,10 @@ import {
   Square,
   Check,
   Trash2,
+  Undo2,
+  Redo2,
 } from "lucide-react";
+
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
 
 export const Route = createFileRoute("/")({
@@ -55,8 +58,11 @@ function AnnotatePage() {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [past, setPast] = useState<Annotation[][]>([]);
+  const [future, setFuture] = useState<Annotation[][]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [captionDraft, setCaptionDraft] = useState("");
+
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [busyText, setBusyText] = useState("");
@@ -101,8 +107,11 @@ function AnnotatePage() {
   const handleFile = (file: File) => {
     setError(null);
     setAnnotations([]);
+    setPast([]);
+    setFuture([]);
     setSelectedId(null);
     setCaptionDraft("");
+
     const reader = new FileReader();
     reader.onload = () => {
       const url = reader.result as string;
@@ -116,16 +125,80 @@ function AnnotatePage() {
     reader.readAsDataURL(file);
   };
 
+  // ---- History (undo/redo) ----
+
+  const HISTORY_LIMIT = 50;
+  const commit = useCallback((snapshot: Annotation[]) => {
+    setPast((p) => {
+      const next = [...p, snapshot];
+      if (next.length > HISTORY_LIMIT) next.shift();
+      return next;
+    });
+    setFuture([]);
+  }, []);
+
+  const undo = useCallback(() => {
+    setPast((p) => {
+      if (p.length === 0) return p;
+      const prev = p[p.length - 1];
+      setAnnotations((curr) => {
+        setFuture((f) => [...f, curr]);
+        return prev;
+      });
+      setSelectedId(null);
+      setCaptionDraft("");
+      return p.slice(0, -1);
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setFuture((f) => {
+      if (f.length === 0) return f;
+      const next = f[f.length - 1];
+      setAnnotations((curr) => {
+        setPast((p) => [...p, curr]);
+        return next;
+      });
+      setSelectedId(null);
+      setCaptionDraft("");
+      return f.slice(0, -1);
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      if (e.key === "z" || e.key === "Z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (e.key === "y" || e.key === "Y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
   // ---- Annotation creation ----
 
-  const addAnnotationAndSelect = useCallback((box: Box) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setAnnotations((prev) => [...prev, { id, label: "", box }]);
-    setSelectedId(id);
-    setCaptionDraft("");
-    // Focus caption input after sheet renders
-    requestAnimationFrame(() => captionInputRef.current?.focus());
-  }, []);
+  const addAnnotationAndSelect = useCallback(
+    (box: Box) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setAnnotations((prev) => {
+        commit(prev);
+        return [...prev, { id, label: "", box }];
+      });
+      setSelectedId(id);
+      setCaptionDraft("");
+      // Focus caption input after sheet renders
+      requestAnimationFrame(() => captionInputRef.current?.focus());
+    },
+    [commit],
+  );
+
 
   const handleAutoScan = async () => {
     if (!imageDataUrl || processing) return;
@@ -145,7 +218,11 @@ function AnnotatePage() {
           label: "",
           box: it.box,
         }));
-        setAnnotations((prev) => [...prev, ...newOnes]);
+        setAnnotations((prev) => {
+          commit(prev);
+          return [...prev, ...newOnes];
+        });
+
         // Select the first new one for captioning
         setSelectedId(newOnes[0].id);
         setCaptionDraft("");
@@ -267,7 +344,10 @@ function AnnotatePage() {
     id: string | null;
     startBox: Box | null;
     startPos: { x: number; y: number } | null;
-  }>({ kind: null, id: null, startBox: null, startPos: null });
+    snapshot: Annotation[] | null;
+    moved: boolean;
+  }>({ kind: null, id: null, startBox: null, startPos: null, snapshot: null, moved: false });
+
 
   const getContainerPos = (clientX: number, clientY: number) => {
     const rect = imageContainerRef.current?.getBoundingClientRect();
@@ -286,7 +366,14 @@ function AnnotatePage() {
     const pos = getContainerPos(e.clientX, e.clientY);
     if (!pos) return;
     setSelectedId(id);
-    moveRef.current = { kind, id, startBox: { ...box }, startPos: pos };
+    moveRef.current = {
+      kind,
+      id,
+      startBox: { ...box },
+      startPos: pos,
+      snapshot: annotations,
+      moved: false,
+    };
   };
 
   const onBoxDragMove = (e: React.PointerEvent) => {
@@ -296,6 +383,8 @@ function AnnotatePage() {
     if (!pos) return;
     const dx = pos.x - m.startPos.x;
     const dy = pos.y - m.startPos.y;
+    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) m.moved = true;
+
     setAnnotations((prev) =>
       prev.map((a) => {
         if (a.id !== m.id) return a;
@@ -332,26 +421,45 @@ function AnnotatePage() {
   };
 
   const endBoxDrag = () => {
-    moveRef.current = { kind: null, id: null, startBox: null, startPos: null };
+    const m = moveRef.current;
+    if (m.kind && m.moved && m.snapshot) {
+      commit(m.snapshot);
+    }
+    moveRef.current = {
+      kind: null,
+      id: null,
+      startBox: null,
+      startPos: null,
+      snapshot: null,
+      moved: false,
+    };
   };
+
 
   // ---- Caption helpers ----
 
   const saveCaption = () => {
     if (!selectedId) return;
-    setAnnotations((prev) =>
-      prev.map((a) => (a.id === selectedId ? { ...a, label: captionDraft.trim() } : a)),
-    );
+    const newLabel = captionDraft.trim();
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (target && target.label !== newLabel) commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
+    });
     setSelectedId(null);
     setCaptionDraft("");
   };
 
   const deleteSelected = () => {
     if (!selectedId) return;
-    setAnnotations((prev) => prev.filter((a) => a.id !== selectedId));
+    setAnnotations((prev) => {
+      commit(prev);
+      return prev.filter((a) => a.id !== selectedId);
+    });
     setSelectedId(null);
     setCaptionDraft("");
   };
+
 
   const selectExisting = (id: string) => {
     if (tapMode || boxMode) return;
@@ -384,6 +492,9 @@ function AnnotatePage() {
     setImageDataUrl(null);
     setImageSize(null);
     setAnnotations([]);
+    setPast([]);
+    setFuture([]);
+
     setSelectedId(null);
     setCaptionDraft("");
     setError(null);
@@ -521,6 +632,24 @@ function AnnotatePage() {
         </span>
         <div className="flex gap-2">
           <button
+            onClick={undo}
+            disabled={past.length === 0}
+            className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
+            aria-label="Undo"
+            title="Undo (Ctrl/Cmd+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={future.length === 0}
+            className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
+            aria-label="Redo"
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => exportImage(false)}
             disabled={annotations.length === 0}
             className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
@@ -537,6 +666,7 @@ function AnnotatePage() {
             <Share2 className="w-4 h-4" />
           </button>
         </div>
+
       </header>
 
       <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
