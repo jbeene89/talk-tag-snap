@@ -58,8 +58,11 @@ function AnnotatePage() {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [past, setPast] = useState<Annotation[][]>([]);
+  const [future, setFuture] = useState<Annotation[][]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [captionDraft, setCaptionDraft] = useState("");
+
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [busyText, setBusyText] = useState("");
