@@ -320,9 +320,9 @@ export const identifyInBox = createServerFn({ method: "POST" })
       "You identify the single most prominent object inside a region the user drew on a photo. The region is given as " +
       "normalized percentages (x, y, width, height) from the top-left. Focus on what is inside that rectangle — it is a hint, " +
       "not an exact crop. Identify the distinct object, equipment, fixture, or part (a board, pole, lift component, device, panel, etc.). " +
-      'Return ONLY: {"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
-      "where the box is a tight bounding box around that object in normalized 0..1 coordinates of the FULL image (not the region). " +
-      'If nothing identifiable is inside the region, return {"label": "", "box": null}. Use a short specific label (2-4 words). ' +
+      'Return ONLY: {"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin) of a tight bounding box around that object in the FULL image (not the region). " +
+      'If nothing identifiable is inside the region, return {"label": "", "box_2d": null}. Use a short specific label (2-4 words). ' +
       "No prose, no markdown.";
 
     try {
