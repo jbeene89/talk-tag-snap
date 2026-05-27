@@ -393,9 +393,13 @@ function AnnotatePage() {
 
       <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
         <div
-          onClick={handleImageTap}
-          className={`relative max-h-full max-w-full ${tapMode ? "cursor-crosshair" : ""}`}
-          style={tapMode ? { touchAction: "manipulation" } : undefined}
+          onClick={boxMode ? undefined : handleImageTap}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className={`relative max-h-full max-w-full ${tapMode || boxMode ? "cursor-crosshair" : ""}`}
+          style={tapMode || boxMode ? { touchAction: "none" } : undefined}
         >
           <img
             src={imageDataUrl}
@@ -403,8 +407,20 @@ function AnnotatePage() {
             className="block max-h-[calc(100vh-260px)] max-w-full object-contain select-none pointer-events-none"
             draggable={false}
           />
-          {tapMode && (
+          {(tapMode || boxMode) && (
             <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
+          )}
+          {/* In-progress drag rectangle */}
+          {drawing && (
+            <div
+              className="absolute border-2 border-yellow-400 bg-yellow-400/15 pointer-events-none"
+              style={{
+                left: `${Math.min(drawing.x1, drawing.x2) * 100}%`,
+                top: `${Math.min(drawing.y1, drawing.y2) * 100}%`,
+                width: `${Math.abs(drawing.x2 - drawing.x1) * 100}%`,
+                height: `${Math.abs(drawing.y2 - drawing.y1) * 100}%`,
+              }}
+            />
           )}
           {/* Boxes overlay (positioned by % over the image) */}
           <div className="absolute inset-0 pointer-events-none">
@@ -429,6 +445,7 @@ function AnnotatePage() {
           </div>
         </div>
       </div>
+
 
 
 
