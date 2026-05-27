@@ -284,3 +284,78 @@ export const identifyAtPoint = createServerFn({ method: "POST" })
     }
   });
 
+type IdentifyInBoxInput = {
+  imageBase64: string;
+  mimeType: string;
+  region: Box; // normalized 0..1
+};
+
+export const identifyInBox = createServerFn({ method: "POST" })
+  .inputValidator((data: IdentifyInBoxInput) => {
+    if (
+      !data ||
+      typeof data.imageBase64 !== "string" ||
+      !data.region ||
+      typeof data.region.x !== "number" ||
+      typeof data.region.y !== "number" ||
+      typeof data.region.w !== "number" ||
+      typeof data.region.h !== "number"
+    ) {
+      throw new Error("imageBase64 and region are required");
+    }
+    return data;
+  })
+  .handler(async ({ data }): Promise<DetectResult> => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) return { box: null, label: "", error: "AI is not configured." };
+
+    const base64 = data.imageBase64.includes(",") ? data.imageBase64.split(",")[1] : data.imageBase64;
+    const r = data.region;
+    const rx = Math.round(r.x * 100);
+    const ry = Math.round(r.y * 100);
+    const rw = Math.round(r.w * 100);
+    const rh = Math.round(r.h * 100);
+
+    const system =
+      "You identify the single most prominent object inside a region the user drew on a photo. The region is given as " +
+      "normalized percentages (x, y, width, height) from the top-left. Focus on what is inside that rectangle — it is a hint, " +
+      "not an exact crop. Identify the distinct object, equipment, fixture, or part (a board, pole, lift component, device, panel, etc.). " +
+      'Return ONLY: {"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
+      "where the box is a tight bounding box around that object in normalized 0..1 coordinates of the FULL image (not the region). " +
+      'If nothing identifiable is inside the region, return {"label": "", "box": null}. Use a short specific label (2-4 words). ' +
+      "No prose, no markdown.";
+
+    try {
+      const res = await callGateway(apiKey, {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `The user drew a box at x=${rx}%, y=${ry}%, width=${rw}%, height=${rh}% (from top-left of the image). Identify the main object inside it and return its bounding box.`,
+              },
+              { type: "image_url", image_url: { url: `data:${data.mimeType};base64,${base64}` } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      if (!res.ok) {
+        console.error("AI gateway error", res.status, await res.text());
+        return { box: null, label: "", error: gatewayErrorMessage(res.status) };
+      }
+
+      const json = await res.json();
+      const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
+      const box = extractBox(parsed);
+      return { box, label: parsed.label || "" };
+    } catch (err) {
+      console.error("identifyInBox failed", err);
+      return { box: null, label: "", error: "Could not reach AI service." };
+    }
+  });
+
