@@ -1121,8 +1121,39 @@ function AnnotatePage() {
             </button>
           </div>
         </div>
+      {/* Action row / scan preview */}
+      {scanPreview ? (
+        <div className="px-4 pt-2 pb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-neutral-400">Tap to add one at a time</span>
+            <div className="flex gap-2">
+              <button
+                onClick={addAllScanItems}
+                className="text-xs font-medium text-yellow-400 active:text-yellow-300"
+              >
+                Add all
+              </button>
+              <button
+                onClick={dismissScanPreview}
+                className="text-xs text-neutral-500 active:text-neutral-300"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {scanPreview.map((item, i) => (
+              <button
+                key={i}
+                onClick={() => addScanItem(item)}
+                className="shrink-0 px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-xs text-neutral-200 active:bg-neutral-700 text-left"
+              >
+                <span className="font-semibold text-yellow-400">{i + 1}.</span> {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
-        // Action row when nothing selected
         <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
           <ModeButton
             active={tapMode}
