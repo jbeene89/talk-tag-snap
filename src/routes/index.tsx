@@ -634,6 +634,16 @@ function AnnotatePage() {
     });
   }, [selectedId, captionDraft, commit]);
 
+  const setSeverity = (sev: Severity) => {
+    if (!selectedId) return;
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (!target || sevOf(target) === sev) return prev;
+      commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, severity: sev } : a));
+    });
+  };
+
   const selectExisting = (id: string) => {
     if (tapMode || boxMode) return;
     flushCaptionDraft();
