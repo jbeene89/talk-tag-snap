@@ -96,6 +96,8 @@ function AnnotatePage() {
   const [error, setError] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(true);
 
+  const [scanPreview, setScanPreview] = useState<{ label: string; box: Box }[] | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
@@ -346,22 +348,7 @@ function AnnotatePage() {
       if (!result.items.length) {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
       } else {
-        // Add all boxes with blank labels — user captions each one.
-        const newOnes: Annotation[] = result.items.map((it, i) => ({
-          id: `auto-${Date.now()}-${i}`,
-          label: "",
-          box: it.box,
-          severity: "minor",
-        }));
-        setAnnotations((prev) => {
-          commit(prev);
-          return [...prev, ...newOnes];
-        });
-
-        // Select the first new one for captioning
-        setSelectedId(newOnes[0].id);
-        setCaptionDraft("");
-        requestAnimationFrame(() => captionInputRef.current?.focus());
+        setScanPreview(result.items);
       }
     } catch (e) {
       console.error(e);
@@ -371,6 +358,30 @@ function AnnotatePage() {
       setBusyText("");
     }
   };
+
+  const addScanItem = (item: { label: string; box: Box }) => {
+    addAnnotationAndSelect(item.box);
+    setCaptionDraft(item.label);
+    setScanPreview((prev) => (prev ? prev.filter((p) => p !== item) : null));
+  };
+
+  const addAllScanItems = () => {
+    if (!scanPreview?.length) return;
+    const toAdd = scanPreview;
+    setAnnotations((prev) => {
+      commit(prev);
+      const newOnes: Annotation[] = toAdd.map((it, i) => ({
+        id: `auto-${Date.now()}-${i}`,
+        label: it.label,
+        box: it.box,
+        severity: "minor",
+      }));
+      return [...prev, ...newOnes];
+    });
+    setScanPreview(null);
+  };
+
+  const dismissScanPreview = () => setScanPreview(null);
 
   const handleImageTap = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!tapMode || !imageDataUrl || processing) return;
@@ -1110,8 +1121,38 @@ function AnnotatePage() {
             </button>
           </div>
         </div>
+      ) : scanPreview ? (
+        <div className="px-4 pt-2 pb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-neutral-400">Tap to add one at a time</span>
+            <div className="flex gap-2">
+              <button
+                onClick={addAllScanItems}
+                className="text-xs font-medium text-yellow-400 active:text-yellow-300"
+              >
+                Add all
+              </button>
+              <button
+                onClick={dismissScanPreview}
+                className="text-xs text-neutral-500 active:text-neutral-300"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {scanPreview.map((item, i) => (
+              <button
+                key={i}
+                onClick={() => addScanItem(item)}
+                className="shrink-0 px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-xs text-neutral-200 active:bg-neutral-700 text-left"
+              >
+                <span className="font-semibold text-yellow-400">{i + 1}.</span> {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
-        // Action row when nothing selected
         <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
           <ModeButton
             active={tapMode}
