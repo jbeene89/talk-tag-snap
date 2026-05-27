@@ -719,6 +719,7 @@ function AnnotatePage() {
             title="Undo (Ctrl/Cmd+Z)"
           >
             <Undo2 className="w-4 h-4" />
+          </button>
           <button
             onClick={redo}
             disabled={future.length === 0}
