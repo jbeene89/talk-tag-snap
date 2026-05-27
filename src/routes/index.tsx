@@ -719,6 +719,14 @@ function AnnotatePage() {
             title="Undo (Ctrl/Cmd+Z)"
           >
             <Undo2 className="w-4 h-4" />
+          <button
+            onClick={redo}
+            disabled={future.length === 0}
+            className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
+            aria-label="Redo"
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
           </button>
           <button
             onClick={copyAsText}
