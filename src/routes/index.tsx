@@ -743,16 +743,18 @@ function AnnotatePage() {
       const y = a.box.y * imageSize.h;
       const w = a.box.w * imageSize.w;
       const h = a.box.h * imageSize.h;
-      ctx.strokeStyle = "#facc15";
+      const sev = sevOf(a);
+      const color = SEV_HEX[sev];
+      ctx.strokeStyle = color;
       ctx.strokeRect(x, y, w, h);
       const label = `${i + 1}. ${a.label?.trim() || "(no description)"}`;
       const pad = fontSize * 0.4;
       const textW = ctx.measureText(label).width + pad * 2;
       const textH = fontSize + pad * 1.2;
       const ty = y - textH < 0 ? y + strokeW : y - textH;
-      ctx.fillStyle = "#facc15";
+      ctx.fillStyle = color;
       ctx.fillRect(x, ty, textW, textH);
-      ctx.fillStyle = "#111827";
+      ctx.fillStyle = sev === "major" ? "#ffffff" : "#111827";
       ctx.fillText(label, x + pad, ty + pad * 0.6);
     });
 
