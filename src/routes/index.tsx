@@ -244,6 +244,7 @@ function AnnotatePage() {
     setFuture([]);
     setSelectedId(null);
     setCaptionDraft("");
+    setZoom({ s: 1, x: 0, y: 0 });
 
     const reader = new FileReader();
     reader.onload = () => {
