@@ -17,6 +17,7 @@ import {
   Redo2,
   ClipboardCopy,
   ClipboardCheck,
+  ImagePlus,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
