@@ -13,7 +13,10 @@ import {
   Square,
   Check,
   Trash2,
+  Undo2,
+  Redo2,
 } from "lucide-react";
+
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
 
 export const Route = createFileRoute("/")({
