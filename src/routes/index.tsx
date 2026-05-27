@@ -15,6 +15,8 @@ import {
   Trash2,
   Undo2,
   Redo2,
+  ClipboardCopy,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
@@ -103,6 +105,41 @@ function AnnotatePage() {
       } catch {}
     };
   }, []);
+
+  // ---- Persist to localStorage so a tab crash doesn't lose the inspection ----
+  const STORAGE_KEY = "soupytag:session:v1";
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data?.imageDataUrl && data?.imageSize) {
+          setImageDataUrl(data.imageDataUrl);
+          setImageSize(data.imageSize);
+          setAnnotations(Array.isArray(data.annotations) ? data.annotations : []);
+        }
+      }
+    } catch {}
+    hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      if (imageDataUrl && imageSize) {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ imageDataUrl, imageSize, annotations }),
+        );
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {}
+  }, [imageDataUrl, imageSize, annotations]);
+
+  const [copied, setCopied] = useState(false);
 
   const handleFile = (file: File) => {
     setError(null);
@@ -461,14 +498,55 @@ function AnnotatePage() {
   };
 
 
+  // Flush the current caption draft into the selected annotation without
+  // clearing selection. Used before switching boxes, toggling modes, sharing.
+  const flushCaptionDraft = useCallback(() => {
+    if (!selectedId) return;
+    const newLabel = captionDraft.trim();
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (!target || target.label === newLabel) return prev;
+      commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
+    });
+  }, [selectedId, captionDraft, commit]);
+
   const selectExisting = (id: string) => {
     if (tapMode || boxMode) return;
+    flushCaptionDraft();
     const a = annotations.find((x) => x.id === id);
     if (!a) return;
     setSelectedId(id);
     setCaptionDraft(a.label);
     requestAnimationFrame(() => captionInputRef.current?.focus());
   };
+
+  const deselect = () => {
+    flushCaptionDraft();
+    setSelectedId(null);
+    setCaptionDraft("");
+  };
+
+  const copyAsText = async () => {
+    if (annotations.length === 0) return;
+    flushCaptionDraft();
+    // Read fresh annotations after flush via functional update
+    setAnnotations((curr) => {
+      const lines = curr.map(
+        (a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`,
+      );
+      const text = lines.join("\n");
+      navigator.clipboard
+        ?.writeText(text)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        })
+        .catch(() => setError("Couldn't copy to clipboard."));
+      return curr;
+    });
+  };
+
 
   const startListening = () => {
     if (!recognitionRef.current || listening || processing) return;
@@ -507,15 +585,17 @@ function AnnotatePage() {
   const exportImage = async (share: boolean) => {
     if (!imageDataUrl || !imageSize) return;
     // Auto-save any in-progress caption first
-    let exportList = annotations;
+    flushCaptionDraft();
+    const exportList = selectedId
+      ? annotations.map((a) =>
+          a.id === selectedId ? { ...a, label: captionDraft.trim() } : a,
+        )
+      : annotations;
     if (selectedId) {
-      exportList = annotations.map((a) =>
-        a.id === selectedId ? { ...a, label: captionDraft.trim() } : a,
-      );
-      setAnnotations(exportList);
       setSelectedId(null);
       setCaptionDraft("");
     }
+
 
     const canvas = document.createElement("canvas");
     canvas.width = imageSize.w;
@@ -533,14 +613,14 @@ function AnnotatePage() {
     ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "top";
 
-    exportList.forEach((a) => {
+    exportList.forEach((a, i) => {
       const x = a.box.x * imageSize.w;
       const y = a.box.y * imageSize.h;
       const w = a.box.w * imageSize.w;
       const h = a.box.h * imageSize.h;
       ctx.strokeStyle = "#facc15";
       ctx.strokeRect(x, y, w, h);
-      const label = a.label || "(no description)";
+      const label = `${i + 1}. ${a.label?.trim() || "(no description)"}`;
       const pad = fontSize * 0.4;
       const textW = ctx.measureText(label).width + pad * 2;
       const textH = fontSize + pad * 1.2;
@@ -650,6 +730,19 @@ function AnnotatePage() {
             <Redo2 className="w-4 h-4" />
           </button>
           <button
+            onClick={copyAsText}
+            disabled={annotations.length === 0}
+            className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
+            aria-label="Copy list as text"
+            title="Copy numbered list to clipboard"
+          >
+            {copied ? (
+              <ClipboardCheck className="w-4 h-4 text-yellow-400" />
+            ) : (
+              <ClipboardCopy className="w-4 h-4" />
+            )}
+          </button>
+          <button
             onClick={() => exportImage(false)}
             disabled={annotations.length === 0}
             className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
@@ -712,7 +805,7 @@ function AnnotatePage() {
 
           {/* Annotation boxes */}
           <div className="absolute inset-0">
-            {annotations.map((a) => {
+            {annotations.map((a, i) => {
               const isSelected = a.id === selectedId;
               return (
                 <div
@@ -734,11 +827,16 @@ function AnnotatePage() {
                     }
                   }}
                 >
-                  {a.label && (
-                    <span className="absolute -top-6 left-0 bg-yellow-400 text-neutral-950 text-xs font-semibold px-1.5 py-0.5 rounded pointer-events-none">
-                      {a.label}
+                  <span className="absolute -top-6 left-0 flex items-center gap-1 pointer-events-none">
+                    <span className="bg-yellow-400 text-neutral-950 text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow">
+                      {i + 1}
                     </span>
-                  )}
+                    {a.label && (
+                      <span className="bg-yellow-400 text-neutral-950 text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate">
+                        {a.label}
+                      </span>
+                    )}
+                  </span>
                   {isSelected && !tapMode && !boxMode && (
                     <>
                       {(["nw", "ne", "sw", "se"] as const).map((corner) => (
