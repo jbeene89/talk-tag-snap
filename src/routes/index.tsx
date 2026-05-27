@@ -96,6 +96,8 @@ function AnnotatePage() {
   const [error, setError] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(true);
 
+  const [scanPreview, setScanPreview] = useState<{ label: string; box: Box }[] | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
