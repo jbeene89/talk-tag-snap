@@ -805,7 +805,7 @@ function AnnotatePage() {
 
           {/* Annotation boxes */}
           <div className="absolute inset-0">
-            {annotations.map((a) => {
+            {annotations.map((a, i) => {
               const isSelected = a.id === selectedId;
               return (
                 <div
@@ -827,11 +827,16 @@ function AnnotatePage() {
                     }
                   }}
                 >
-                  {a.label && (
-                    <span className="absolute -top-6 left-0 bg-yellow-400 text-neutral-950 text-xs font-semibold px-1.5 py-0.5 rounded pointer-events-none">
-                      {a.label}
+                  <span className="absolute -top-6 left-0 flex items-center gap-1 pointer-events-none">
+                    <span className="bg-yellow-400 text-neutral-950 text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow">
+                      {i + 1}
                     </span>
-                  )}
+                    {a.label && (
+                      <span className="bg-yellow-400 text-neutral-950 text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate">
+                        {a.label}
+                      </span>
+                    )}
+                  </span>
                   {isSelected && !tapMode && !boxMode && (
                     <>
                       {(["nw", "ne", "sw", "se"] as const).map((corner) => (
