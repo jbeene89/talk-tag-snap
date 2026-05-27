@@ -15,6 +15,8 @@ import {
   Trash2,
   Undo2,
   Redo2,
+  ClipboardCopy,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
