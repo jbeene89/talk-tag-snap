@@ -494,10 +494,10 @@ function AnnotatePage() {
         </div>
       )}
 
-      {/* Action row: tap + auto-detect + mic */}
-      <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+      {/* Action row: tap + box + auto-detect + mic */}
+      <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-4">
         <button
-          onClick={() => setTapMode((v) => !v)}
+          onClick={() => { setTapMode((v) => !v); setBoxMode(false); }}
           disabled={processing}
           className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
           aria-label="Tap to identify"
@@ -517,6 +517,26 @@ function AnnotatePage() {
         </button>
 
         <button
+          onClick={() => { setBoxMode((v) => !v); setTapMode(false); }}
+          disabled={processing}
+          className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
+          aria-label="Draw box to identify"
+        >
+          <span
+            className={`w-14 h-14 rounded-full flex items-center justify-center border ${
+              boxMode
+                ? "bg-yellow-400 text-neutral-950 border-yellow-300"
+                : "bg-neutral-800 text-yellow-400 border-neutral-700"
+            }`}
+          >
+            <Square className="w-6 h-6" />
+          </span>
+          <span className={boxMode ? "text-yellow-400 font-medium" : "text-neutral-300"}>
+            {boxMode ? "Box on" : "Box"}
+          </span>
+        </button>
+
+        <button
           onClick={handleAutoScan}
           disabled={processing}
           className="flex flex-col items-center gap-1 text-xs text-neutral-300 disabled:opacity-40 active:text-white"
@@ -527,6 +547,8 @@ function AnnotatePage() {
           </span>
           Auto-detect
         </button>
+
+
 
 
         {speechSupported ? (
