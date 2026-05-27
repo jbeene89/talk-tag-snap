@@ -613,14 +613,14 @@ function AnnotatePage() {
     ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "top";
 
-    exportList.forEach((a) => {
+    exportList.forEach((a, i) => {
       const x = a.box.x * imageSize.w;
       const y = a.box.y * imageSize.h;
       const w = a.box.w * imageSize.w;
       const h = a.box.h * imageSize.h;
       ctx.strokeStyle = "#facc15";
       ctx.strokeRect(x, y, w, h);
-      const label = a.label || "(no description)";
+      const label = `${i + 1}. ${a.label?.trim() || "(no description)"}`;
       const pad = fontSize * 0.4;
       const textW = ctx.measureText(label).width + pad * 2;
       const textH = fontSize + pad * 1.2;
