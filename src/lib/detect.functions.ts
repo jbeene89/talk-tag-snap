@@ -245,9 +245,9 @@ export const identifyAtPoint = createServerFn({ method: "POST" })
       "You identify the single object the user is pointing at in a photo. The user gives a point as normalized percentages " +
       "from the top-left of the image. Identify the distinct object, equipment, fixture, or part located at or immediately " +
       "around that point (a board, pole, lift component, device, panel, etc.). " +
-      'Return ONLY: {"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
-      "where the box is a tight bounding box around that object in normalized 0..1 coordinates. " +
-      'If nothing identifiable is at that point, return {"label": "", "box": null}. Use a short specific label (2-4 words). ' +
+      'Return ONLY: {"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin) of a tight bounding box around that object. " +
+      'If nothing identifiable is at that point, return {"label": "", "box_2d": null}. Use a short specific label (2-4 words). ' +
       "No prose, no markdown.";
 
     try {
