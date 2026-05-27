@@ -107,8 +107,11 @@ function AnnotatePage() {
   const handleFile = (file: File) => {
     setError(null);
     setAnnotations([]);
+    setPast([]);
+    setFuture([]);
     setSelectedId(null);
     setCaptionDraft("");
+
     const reader = new FileReader();
     reader.onload = () => {
       const url = reader.result as string;
