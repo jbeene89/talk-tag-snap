@@ -721,13 +721,17 @@ function AnnotatePage() {
             <Undo2 className="w-4 h-4" />
           </button>
           <button
-            onClick={redo}
-            disabled={future.length === 0}
+            onClick={copyAsText}
+            disabled={annotations.length === 0}
             className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
-            aria-label="Redo"
-            title="Redo (Ctrl/Cmd+Shift+Z)"
+            aria-label="Copy list as text"
+            title="Copy numbered list to clipboard"
           >
-            <Redo2 className="w-4 h-4" />
+            {copied ? (
+              <ClipboardCheck className="w-4 h-4 text-yellow-400" />
+            ) : (
+              <ClipboardCopy className="w-4 h-4" />
+            )}
           </button>
           <button
             onClick={() => exportImage(false)}
