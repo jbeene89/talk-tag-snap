@@ -418,8 +418,20 @@ function AnnotatePage() {
   };
 
   const endBoxDrag = () => {
-    moveRef.current = { kind: null, id: null, startBox: null, startPos: null };
+    const m = moveRef.current;
+    if (m.kind && m.moved && m.snapshot) {
+      commit(m.snapshot);
+    }
+    moveRef.current = {
+      kind: null,
+      id: null,
+      startBox: null,
+      startPos: null,
+      snapshot: null,
+      moved: false,
+    };
   };
+
 
   // ---- Caption helpers ----
 
