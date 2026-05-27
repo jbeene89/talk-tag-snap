@@ -1056,6 +1056,25 @@ function AnnotatePage() {
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
           </div>
+          <div className="flex gap-1.5 mb-2">
+            {(["info", "minor", "major"] as const).map((sev) => {
+              const active = selected && sevOf(selected) === sev;
+              const label = sev === "info" ? "Info" : sev === "minor" ? "Minor" : "Major";
+              return (
+                <button
+                  key={sev}
+                  onClick={() => setSeverity(sev)}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                    active
+                      ? `${SEV_BG[sev]} ${SEV_TEXT[sev]} border-transparent`
+                      : "bg-neutral-800 text-neutral-400 border-neutral-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
           <div className="flex items-center gap-2">
             <input
               ref={captionInputRef}
