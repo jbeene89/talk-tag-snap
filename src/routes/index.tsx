@@ -464,22 +464,22 @@ function AnnotatePage() {
     };
     if (userBox.w < 0.02 || userBox.h < 0.02) return;
 
-    // Ask AI to tighten the box, but if it fails, just use the drawn box.
-    setProcessing(true);
-    setBusyText("Tightening outline…");
+    // Use the drawn box exactly as-is. Ask AI for a label only, never resize/move.
+    addAnnotationAndSelect(userBox);
     setError(null);
     try {
       const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
       const result = await identifyBox({
         data: { imageBase64: imageDataUrl, mimeType: mime, region: userBox },
       });
-      addAnnotationAndSelect(result?.box ?? userBox);
+      const label = result?.label?.trim();
+      if (label) {
+        setAnnotations((prev) =>
+          prev.map((a) => (a.box === userBox || (a.box.x === userBox.x && a.box.y === userBox.y && a.box.w === userBox.w && a.box.h === userBox.h) ? { ...a, label: a.label || label } : a)),
+        );
+      }
     } catch (err) {
       console.error(err);
-      addAnnotationAndSelect(userBox);
-    } finally {
-      setProcessing(false);
-      setBusyText("");
     }
   };
 
