@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2, Sparkles, Hand } from "lucide-react";
-import { detectBoundingBox, scanObjects, identifyAtPoint } from "@/lib/detect.functions";
+import { Camera, Mic, Download, Share2, X, RotateCcw, Loader2, Sparkles, Hand, Square } from "lucide-react";
+import { detectBoundingBox, scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -24,7 +24,11 @@ function AnnotatePage() {
   const detect = useServerFn(detectBoundingBox);
   const scan = useServerFn(scanObjects);
   const identify = useServerFn(identifyAtPoint);
+  const identifyBox = useServerFn(identifyInBox);
   const [tapMode, setTapMode] = useState(false);
+  const [boxMode, setBoxMode] = useState(false);
+  const [drawing, setDrawing] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const dragRef = useRef<{ active: boolean; start: { x: number; y: number } | null }>({ active: false, start: null });
 
 
 
@@ -187,7 +191,65 @@ function AnnotatePage() {
     }
   };
 
+  const getPointerPos = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+    };
+  };
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!boxMode || processing) return;
+    e.preventDefault();
+    (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+    const p = getPointerPos(e);
+    dragRef.current = { active: true, start: p };
+    setDrawing({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!boxMode || !dragRef.current.active || !dragRef.current.start) return;
+    const p = getPointerPos(e);
+    setDrawing({ x1: dragRef.current.start.x, y1: dragRef.current.start.y, x2: p.x, y2: p.y });
+  };
+
+  const handlePointerUp = async (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!boxMode || !dragRef.current.active || !dragRef.current.start) return;
+    dragRef.current = { active: false, start: null };
+    const d = drawing;
+    setDrawing(null);
+    if (!d || !imageDataUrl) return;
+    const x = Math.min(d.x1, d.x2);
+    const y = Math.min(d.y1, d.y2);
+    const w = Math.abs(d.x2 - d.x1);
+    const h = Math.abs(d.y2 - d.y1);
+    if (w < 0.02 || h < 0.02) return; // too small, treat as accidental tap
+    setProcessing(true);
+    setError(null);
+    setTranscript("identifying boxed region");
+    try {
+      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
+      const result = await identifyBox({
+        data: { imageBase64: imageDataUrl, mimeType: mime, region: { x, y, w, h } },
+      });
+      if (result.error) setError(result.error);
+      if (!result.box || !result.label) {
+        setError((prev) => prev ?? "Couldn't identify anything in that box. Try drawing tighter around the object.");
+      } else {
+        setAnnotations((prev) => [
+          ...prev,
+          { id: `box-${Date.now()}`, label: result.label, box: result.box },
+        ]);
+        setTranscript("");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Try again.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
 
   const reset = () => {
@@ -331,9 +393,13 @@ function AnnotatePage() {
 
       <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
         <div
-          onClick={handleImageTap}
-          className={`relative max-h-full max-w-full ${tapMode ? "cursor-crosshair" : ""}`}
-          style={tapMode ? { touchAction: "manipulation" } : undefined}
+          onClick={boxMode ? undefined : handleImageTap}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className={`relative max-h-full max-w-full ${tapMode || boxMode ? "cursor-crosshair" : ""}`}
+          style={tapMode || boxMode ? { touchAction: "none" } : undefined}
         >
           <img
             src={imageDataUrl}
@@ -341,8 +407,20 @@ function AnnotatePage() {
             className="block max-h-[calc(100vh-260px)] max-w-full object-contain select-none pointer-events-none"
             draggable={false}
           />
-          {tapMode && (
+          {(tapMode || boxMode) && (
             <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
+          )}
+          {/* In-progress drag rectangle */}
+          {drawing && (
+            <div
+              className="absolute border-2 border-yellow-400 bg-yellow-400/15 pointer-events-none"
+              style={{
+                left: `${Math.min(drawing.x1, drawing.x2) * 100}%`,
+                top: `${Math.min(drawing.y1, drawing.y2) * 100}%`,
+                width: `${Math.abs(drawing.x2 - drawing.x1) * 100}%`,
+                height: `${Math.abs(drawing.y2 - drawing.y1) * 100}%`,
+              }}
+            />
           )}
           {/* Boxes overlay (positioned by % over the image) */}
           <div className="absolute inset-0 pointer-events-none">
@@ -370,6 +448,7 @@ function AnnotatePage() {
 
 
 
+
       {/* Status / transcript / errors */}
       <div className="px-4 pt-2 min-h-[2rem] text-center text-sm">
         {processing && (
@@ -379,16 +458,21 @@ function AnnotatePage() {
               ? "Scanning photo…"
               : transcript === "identifying tapped object"
                 ? "Identifying object…"
-                : `Finding "${transcript}"…`}
+                : transcript === "identifying boxed region"
+                  ? "Identifying boxed region…"
+                  : `Finding "${transcript}"…`}
           </span>
         )}
         {!processing && tapMode && !error && (
           <span className="text-yellow-400 font-medium">Tap on the object to identify it</span>
         )}
-        {!processing && !tapMode && listening && (
+        {!processing && boxMode && !error && (
+          <span className="text-yellow-400 font-medium">Drag a box around the object</span>
+        )}
+        {!processing && !tapMode && !boxMode && listening && (
           <span className="text-yellow-400 font-medium">Listening… say what to highlight</span>
         )}
-        {!processing && !tapMode && !listening && transcript && transcript !== "scanning photo" && transcript !== "identifying tapped object" && (
+        {!processing && !tapMode && !boxMode && !listening && transcript && !["scanning photo","identifying tapped object","identifying boxed region"].includes(transcript) && (
           <span className="text-neutral-400">Heard: "{transcript}"</span>
         )}
         {error && <div className="text-red-400 mt-1">{error}</div>}
@@ -410,10 +494,10 @@ function AnnotatePage() {
         </div>
       )}
 
-      {/* Action row: tap + auto-detect + mic */}
-      <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+      {/* Action row: tap + box + auto-detect + mic */}
+      <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-4">
         <button
-          onClick={() => setTapMode((v) => !v)}
+          onClick={() => { setTapMode((v) => !v); setBoxMode(false); }}
           disabled={processing}
           className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
           aria-label="Tap to identify"
@@ -433,6 +517,26 @@ function AnnotatePage() {
         </button>
 
         <button
+          onClick={() => { setBoxMode((v) => !v); setTapMode(false); }}
+          disabled={processing}
+          className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
+          aria-label="Draw box to identify"
+        >
+          <span
+            className={`w-14 h-14 rounded-full flex items-center justify-center border ${
+              boxMode
+                ? "bg-yellow-400 text-neutral-950 border-yellow-300"
+                : "bg-neutral-800 text-yellow-400 border-neutral-700"
+            }`}
+          >
+            <Square className="w-6 h-6" />
+          </span>
+          <span className={boxMode ? "text-yellow-400 font-medium" : "text-neutral-300"}>
+            {boxMode ? "Box on" : "Box"}
+          </span>
+        </button>
+
+        <button
           onClick={handleAutoScan}
           disabled={processing}
           className="flex flex-col items-center gap-1 text-xs text-neutral-300 disabled:opacity-40 active:text-white"
@@ -443,6 +547,8 @@ function AnnotatePage() {
           </span>
           Auto-detect
         </button>
+
+
 
 
         {speechSupported ? (
