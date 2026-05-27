@@ -576,13 +576,38 @@ function AnnotatePage() {
   const saveCaption = () => {
     if (!selectedId) return;
     const newLabel = captionDraft.trim();
+    const currentId = selectedId;
+    const wantsContinue = wasListeningRef.current;
+    let nextId: string | null = null;
     setAnnotations((prev) => {
-      const target = prev.find((a) => a.id === selectedId);
+      const target = prev.find((a) => a.id === currentId);
       if (target && target.label !== newLabel) commit(prev);
-      return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
+      const updated = prev.map((a) => (a.id === currentId ? { ...a, label: newLabel } : a));
+      // Find next annotation (in order) with an empty label
+      const idx = updated.findIndex((a) => a.id === currentId);
+      const after = updated.slice(idx + 1).concat(updated.slice(0, idx));
+      const next = after.find((a) => !a.label?.trim());
+      nextId = next?.id ?? null;
+      return updated;
     });
-    setSelectedId(null);
-    setCaptionDraft("");
+    if (nextId) {
+      setSelectedId(nextId);
+      setCaptionDraft("");
+      requestAnimationFrame(() => captionInputRef.current?.focus());
+      if (wantsContinue) {
+        // Restart mic on the next box
+        setTimeout(() => {
+          try {
+            recognitionRef.current?.start();
+            setListening(true);
+          } catch {}
+        }, 250);
+      }
+    } else {
+      setSelectedId(null);
+      setCaptionDraft("");
+      wasListeningRef.current = false;
+    }
   };
 
   const deleteSelected = () => {
