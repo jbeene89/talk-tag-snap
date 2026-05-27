@@ -632,6 +632,24 @@ function AnnotatePage() {
         </span>
         <div className="flex gap-2">
           <button
+            onClick={undo}
+            disabled={past.length === 0}
+            className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
+            aria-label="Undo"
+            title="Undo (Ctrl/Cmd+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={future.length === 0}
+            className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
+            aria-label="Redo"
+            title="Redo (Ctrl/Cmd+Shift+Z)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => exportImage(false)}
             disabled={annotations.length === 0}
             className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
@@ -648,6 +666,7 @@ function AnnotatePage() {
             <Share2 className="w-4 h-4" />
           </button>
         </div>
+
       </header>
 
       <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
