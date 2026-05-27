@@ -492,6 +492,9 @@ function AnnotatePage() {
     setImageDataUrl(null);
     setImageSize(null);
     setAnnotations([]);
+    setPast([]);
+    setFuture([]);
+
     setSelectedId(null);
     setCaptionDraft("");
     setError(null);
