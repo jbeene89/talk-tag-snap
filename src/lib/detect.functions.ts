@@ -163,8 +163,8 @@ export const scanObjects = createServerFn({ method: "POST" })
 
     const system =
       "You identify notable distinct objects, equipment, devices, fixtures, products, containers, tools, or items visible in a photo. " +
-      'Return ONLY a compact JSON object: {"items":[{"label": string, "box": {"x": number, "y": number, "w": number, "h": number}}]} ' +
-      "where x,y,w,h are normalized 0..1 coordinates of a tight bounding box around the object. " +
+      'Return ONLY a compact JSON object: {"items":[{"label": string, "box_2d": [ymin, xmin, ymax, xmax]}]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin). " +
       "Use short specific labels (2-4 words). Return up to 8 items, prioritizing the most prominent. " +
       "Always return at least one item if any foreground object is visible — even a single product, bottle, tool, or part counts. " +
       "Only skip pure background (walls, floor, sky, ceiling). No prose, no markdown.";
