@@ -24,7 +24,11 @@ function AnnotatePage() {
   const detect = useServerFn(detectBoundingBox);
   const scan = useServerFn(scanObjects);
   const identify = useServerFn(identifyAtPoint);
+  const identifyBox = useServerFn(identifyInBox);
   const [tapMode, setTapMode] = useState(false);
+  const [boxMode, setBoxMode] = useState(false);
+  const [drawing, setDrawing] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const dragRef = useRef<{ active: boolean; start: { x: number; y: number } | null }>({ active: false, start: null });
 
 
 
