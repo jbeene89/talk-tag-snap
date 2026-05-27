@@ -215,7 +215,11 @@ function AnnotatePage() {
           label: "",
           box: it.box,
         }));
-        setAnnotations((prev) => [...prev, ...newOnes]);
+        setAnnotations((prev) => {
+          commit(prev);
+          return [...prev, ...newOnes];
+        });
+
         // Select the first new one for captioning
         setSelectedId(newOnes[0].id);
         setCaptionDraft("");
