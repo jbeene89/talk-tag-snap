@@ -458,16 +458,21 @@ function AnnotatePage() {
               ? "Scanning photo…"
               : transcript === "identifying tapped object"
                 ? "Identifying object…"
-                : `Finding "${transcript}"…`}
+                : transcript === "identifying boxed region"
+                  ? "Identifying boxed region…"
+                  : `Finding "${transcript}"…`}
           </span>
         )}
         {!processing && tapMode && !error && (
           <span className="text-yellow-400 font-medium">Tap on the object to identify it</span>
         )}
-        {!processing && !tapMode && listening && (
+        {!processing && boxMode && !error && (
+          <span className="text-yellow-400 font-medium">Drag a box around the object</span>
+        )}
+        {!processing && !tapMode && !boxMode && listening && (
           <span className="text-yellow-400 font-medium">Listening… say what to highlight</span>
         )}
-        {!processing && !tapMode && !listening && transcript && transcript !== "scanning photo" && transcript !== "identifying tapped object" && (
+        {!processing && !tapMode && !boxMode && !listening && transcript && !["scanning photo","identifying tapped object","identifying boxed region"].includes(transcript) && (
           <span className="text-neutral-400">Heard: "{transcript}"</span>
         )}
         {error && <div className="text-red-400 mt-1">{error}</div>}
