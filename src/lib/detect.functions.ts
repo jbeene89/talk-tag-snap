@@ -115,9 +115,9 @@ export const detectBoundingBox = createServerFn({ method: "POST" })
 
     const system =
       "You locate objects in images. Given a photo and a short phrase describing something visible, return ONLY a compact JSON object: " +
-      '{"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
-      "where x,y,w,h are normalized 0..1 coordinates of the smallest tight rectangle around the described object. " +
-      'If the object is not visible, return {"label": <phrase>, "box": null}. No prose, no markdown.';
+      '{"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin). " +
+      'If the object is not visible, return {"label": <phrase>, "box_2d": null}. No prose, no markdown.';
 
     try {
       const res = await callGateway(apiKey, {
@@ -163,8 +163,8 @@ export const scanObjects = createServerFn({ method: "POST" })
 
     const system =
       "You identify notable distinct objects, equipment, devices, fixtures, products, containers, tools, or items visible in a photo. " +
-      'Return ONLY a compact JSON object: {"items":[{"label": string, "box": {"x": number, "y": number, "w": number, "h": number}}]} ' +
-      "where x,y,w,h are normalized 0..1 coordinates of a tight bounding box around the object. " +
+      'Return ONLY a compact JSON object: {"items":[{"label": string, "box_2d": [ymin, xmin, ymax, xmax]}]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin). " +
       "Use short specific labels (2-4 words). Return up to 8 items, prioritizing the most prominent. " +
       "Always return at least one item if any foreground object is visible — even a single product, bottle, tool, or part counts. " +
       "Only skip pure background (walls, floor, sky, ceiling). No prose, no markdown.";
@@ -245,9 +245,9 @@ export const identifyAtPoint = createServerFn({ method: "POST" })
       "You identify the single object the user is pointing at in a photo. The user gives a point as normalized percentages " +
       "from the top-left of the image. Identify the distinct object, equipment, fixture, or part located at or immediately " +
       "around that point (a board, pole, lift component, device, panel, etc.). " +
-      'Return ONLY: {"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
-      "where the box is a tight bounding box around that object in normalized 0..1 coordinates. " +
-      'If nothing identifiable is at that point, return {"label": "", "box": null}. Use a short specific label (2-4 words). ' +
+      'Return ONLY: {"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin) of a tight bounding box around that object. " +
+      'If nothing identifiable is at that point, return {"label": "", "box_2d": null}. Use a short specific label (2-4 words). ' +
       "No prose, no markdown.";
 
     try {
@@ -320,9 +320,9 @@ export const identifyInBox = createServerFn({ method: "POST" })
       "You identify the single most prominent object inside a region the user drew on a photo. The region is given as " +
       "normalized percentages (x, y, width, height) from the top-left. Focus on what is inside that rectangle — it is a hint, " +
       "not an exact crop. Identify the distinct object, equipment, fixture, or part (a board, pole, lift component, device, panel, etc.). " +
-      'Return ONLY: {"label": string, "box": {"x": number, "y": number, "w": number, "h": number}} ' +
-      "where the box is a tight bounding box around that object in normalized 0..1 coordinates of the FULL image (not the region). " +
-      'If nothing identifiable is inside the region, return {"label": "", "box": null}. Use a short specific label (2-4 words). ' +
+      'Return ONLY: {"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
+      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin) of a tight bounding box around that object in the FULL image (not the region). " +
+      'If nothing identifiable is inside the region, return {"label": "", "box_2d": null}. Use a short specific label (2-4 words). ' +
       "No prose, no markdown.";
 
     try {
