@@ -437,19 +437,26 @@ function AnnotatePage() {
 
   const saveCaption = () => {
     if (!selectedId) return;
-    setAnnotations((prev) =>
-      prev.map((a) => (a.id === selectedId ? { ...a, label: captionDraft.trim() } : a)),
-    );
+    const newLabel = captionDraft.trim();
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (target && target.label !== newLabel) commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, label: newLabel } : a));
+    });
     setSelectedId(null);
     setCaptionDraft("");
   };
 
   const deleteSelected = () => {
     if (!selectedId) return;
-    setAnnotations((prev) => prev.filter((a) => a.id !== selectedId));
+    setAnnotations((prev) => {
+      commit(prev);
+      return prev.filter((a) => a.id !== selectedId);
+    });
     setSelectedId(null);
     setCaptionDraft("");
   };
+
 
   const selectExisting = (id: string) => {
     if (tapMode || boxMode) return;
