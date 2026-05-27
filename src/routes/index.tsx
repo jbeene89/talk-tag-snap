@@ -943,10 +943,11 @@ function AnnotatePage() {
           <div className="absolute inset-0">
             {annotations.map((a, i) => {
               const isSelected = a.id === selectedId;
+              const sev = sevOf(a);
               return (
                 <div
                   key={a.id}
-                  className={`absolute ${isSelected ? "border-2 border-yellow-300 bg-yellow-400/10" : "border-[3px] border-yellow-400"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
+                  className={`absolute ${SEV_BORDER[sev]} ${isSelected ? "border-2 bg-white/5" : "border-[3px]"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
                   style={{
                     left: `${a.box.x * 100}%`,
                     top: `${a.box.y * 100}%`,
@@ -964,11 +965,11 @@ function AnnotatePage() {
                   }}
                 >
                   <span className="absolute -top-6 left-0 flex items-center gap-1 pointer-events-none">
-                    <span className="bg-yellow-400 text-neutral-950 text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow">
+                    <span className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow`}>
                       {i + 1}
                     </span>
                     {a.label && (
-                      <span className="bg-yellow-400 text-neutral-950 text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate">
+                      <span className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate`}>
                         {a.label}
                       </span>
                     )}
