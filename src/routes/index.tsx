@@ -17,6 +17,7 @@ import {
   Redo2,
   ClipboardCopy,
   ClipboardCheck,
+  ImagePlus,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
@@ -99,6 +100,7 @@ function AnnotatePage() {
   const [scanPreview, setScanPreview] = useState<{ label: string; box: Box }[] | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
@@ -815,7 +817,7 @@ function AnnotatePage() {
           </p>
         </header>
 
-        <div className="flex-1 flex flex-col items-center justify-center px-6">
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full max-w-xs aspect-square rounded-3xl bg-yellow-400 text-neutral-950 flex flex-col items-center justify-center gap-3 shadow-2xl shadow-yellow-400/20 active:scale-95 transition-transform"
@@ -823,8 +825,15 @@ function AnnotatePage() {
             <Camera className="w-16 h-16" strokeWidth={2.2} />
             <span className="text-xl font-semibold">Take Photo</span>
           </button>
-          <p className="text-xs text-neutral-500 mt-6 text-center max-w-xs">
-            Opens your camera. Or pick an existing photo from your gallery.
+          <button
+            onClick={() => uploadInputRef.current?.click()}
+            className="w-full max-w-xs py-4 rounded-2xl bg-neutral-800 text-neutral-100 flex items-center justify-center gap-2 border border-neutral-700 active:scale-95 transition-transform"
+          >
+            <ImagePlus className="w-5 h-5" />
+            <span className="text-base font-medium">Upload from device</span>
+          </button>
+          <p className="text-xs text-neutral-500 mt-2 text-center max-w-xs">
+            Take a new photo, or upload one you already have.
           </p>
         </div>
 
@@ -833,6 +842,17 @@ function AnnotatePage() {
           type="file"
           accept="image/*"
           capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="image/*"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
