@@ -36,13 +36,38 @@ export const Route = createFileRoute("/")({
 });
 
 type Box = { x: number; y: number; w: number; h: number };
+type Severity = "info" | "minor" | "major";
 type Annotation = {
   id: string;
   label: string;
   box: Box;
+  severity?: Severity;
 };
 
 type DragKind = "move" | "nw" | "ne" | "sw" | "se" | null;
+
+// Tailwind colors mapped per severity. Used for box border, badge bg, and canvas export.
+const SEV_HEX: Record<Severity, string> = {
+  info: "#38bdf8", // sky-400
+  minor: "#facc15", // yellow-400
+  major: "#ef4444", // red-500
+};
+const SEV_BORDER: Record<Severity, string> = {
+  info: "border-sky-400",
+  minor: "border-yellow-400",
+  major: "border-red-500",
+};
+const SEV_BG: Record<Severity, string> = {
+  info: "bg-sky-400",
+  minor: "bg-yellow-400",
+  major: "bg-red-500",
+};
+const SEV_TEXT: Record<Severity, string> = {
+  info: "text-neutral-950",
+  minor: "text-neutral-950",
+  major: "text-white",
+};
+const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
 function AnnotatePage() {
   const scan = useServerFn(scanObjects);
