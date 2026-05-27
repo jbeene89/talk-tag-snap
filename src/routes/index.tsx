@@ -887,7 +887,18 @@ function AnnotatePage() {
 
       </header>
 
-      <div className="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
+      <div
+        ref={zoomViewportRef}
+        className="relative flex-1 flex items-center justify-center bg-black overflow-hidden"
+        style={{ touchAction: zoom.s > 1 ? "none" : undefined }}
+      >
+        <div
+          style={{
+            transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
+            transformOrigin: "0 0",
+            transition: pinchRef.current ? "none" : "transform 0.15s ease-out",
+          }}
+        >
         <div
           ref={imageContainerRef}
           onClick={boxMode ? undefined : handleImageTap}
