@@ -184,6 +184,59 @@ function AnnotatePage() {
   const wasListeningRef = useRef(false);
   const autoAdvanceRef = useRef(false);
 
+  // Pinch gesture handlers — attached natively so we can preventDefault and beat the page-zoom behavior
+  useEffect(() => {
+    const el = zoomViewportRef.current;
+    if (!el) return;
+    const clamp = (s: number) => Math.max(1, Math.min(5, s));
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      e.preventDefault();
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const rect = el.getBoundingClientRect();
+      pinchRef.current = {
+        startDist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+        startScale: zoom.s,
+        startX: zoom.x,
+        startY: zoom.y,
+        focalX: (a.clientX + b.clientX) / 2 - rect.left,
+        focalY: (a.clientY + b.clientY) / 2 - rect.top,
+      };
+    };
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !pinchRef.current) return;
+      e.preventDefault();
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const p = pinchRef.current;
+      const newScale = clamp((dist / p.startDist) * p.startScale);
+      const k = newScale / p.startScale;
+      // Zoom around the original focal point
+      const nx = p.focalX - (p.focalX - p.startX) * k;
+      const ny = p.focalY - (p.focalY - p.startY) * k;
+      setZoom({ s: newScale, x: nx, y: ny });
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinchRef.current = null;
+        // Snap back if essentially 1x
+        setZoom((z) => (z.s <= 1.02 ? { s: 1, x: 0, y: 0 } : z));
+      }
+    };
+    el.addEventListener("touchstart", onStart, { passive: false });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [zoom.s, zoom.x, zoom.y, imageDataUrl]);
+
+  const resetZoom = () => setZoom({ s: 1, x: 0, y: 0 });
+
   const handleFile = (file: File) => {
     setError(null);
     setAnnotations([]);
