@@ -1,0 +1,9 @@
+# SoupyTag
+
+> SoupyTag is a mobile-first web app for tagging defects in photos. Snap a picture, let AI outline the problem area, and describe what's wrong with your voice — no account required.
+
+## Pages
+
+- [Home](/): Capture a photo, tap or draw to outline a defect, and add voice-described tags.
+- [WrapKit Cloud](/wrapkit): Turn any website into a publishable Android app — order page and pricing.
+- [Privacy Policy](/privacy): How SoupyTag handles photos, voice notes, and AI tagging data.

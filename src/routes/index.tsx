@@ -36,6 +36,12 @@ export const Route = createFileRoute("/")({
         content:
           "Snap a photo of broken things or construction mistakes. AI outlines the spot, you describe the problem.",
       },
+      { property: "og:title", content: "Tag Defects — Tap, Outline, Describe" },
+      {
+        property: "og:description",
+        content:
+          "Snap a photo, AI outlines the defect, you describe what's wrong with your voice. Share a tagged image in seconds.",
+      },
     ],
   }),
 });
@@ -916,6 +922,7 @@ function AnnotatePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
+      <h1 className="sr-only">Tag defects in your photo</h1>
       <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
         <button
           onClick={reset}
@@ -1024,7 +1031,7 @@ function AnnotatePage() {
         >
           <img
             src={imageDataUrl}
-            alt="Captured"
+            alt="Photo being annotated for defect tagging"
             className="block max-h-[calc(100vh-300px)] max-w-full object-contain select-none pointer-events-none"
             draggable={false}
           />
