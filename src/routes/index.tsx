@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
+import { useAiUsage, FREE_LIMIT } from "@/lib/usage";
+import { PaywallDialog } from "@/components/PaywallDialog";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -74,6 +76,8 @@ function AnnotatePage() {
   const scan = useServerFn(scanObjects);
   const identify = useServerFn(identifyAtPoint);
   const identifyBox = useServerFn(identifyInBox);
+
+  const usage = useAiUsage();
 
   const [tapMode, setTapMode] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
@@ -340,6 +344,7 @@ function AnnotatePage() {
 
   const handleAutoScan = async () => {
     if (!imageDataUrl || processing) return;
+    if (!usage.requestAiCall()) return;
     setProcessing(true);
     setBusyText("Scanning photo…");
     setError(null);
@@ -350,6 +355,7 @@ function AnnotatePage() {
       if (!result.items.length) {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
       } else {
+        usage.recordAiCall();
         setScanPreview(result.items);
       }
     } catch (e) {
@@ -391,6 +397,7 @@ function AnnotatePage() {
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    if (!usage.requestAiCall()) return;
     setProcessing(true);
     setBusyText("Outlining tapped spot…");
     setError(null);
@@ -413,6 +420,7 @@ function AnnotatePage() {
       } else {
         addAnnotationAndSelect(result.box);
       }
+      if (!result.error) usage.recordAiCall();
     } catch (err) {
       console.error(err);
       setError("Something went wrong. Try again.");
@@ -469,6 +477,7 @@ function AnnotatePage() {
     // Use the drawn box exactly as-is. Ask AI for a label only, never resize/move.
     addAnnotationAndSelect(userBox);
     setError(null);
+    if (!usage.requestAiCall()) return;
     try {
       const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
       const result = await identifyBox({
@@ -480,6 +489,7 @@ function AnnotatePage() {
           prev.map((a) => (a.box === userBox || (a.box.x === userBox.x && a.box.y === userBox.y && a.box.w === userBox.w && a.box.h === userBox.h) ? { ...a, label: a.label || label } : a)),
         );
       }
+      if (!result?.error) usage.recordAiCall();
     } catch (err) {
       console.error(err);
     }
@@ -860,6 +870,11 @@ function AnnotatePage() {
             e.target.value = "";
           }}
         />
+        <PaywallDialog
+          open={usage.paywallOpen}
+          onOpenChange={usage.setPaywallOpen}
+          onUnlock={usage.unlock}
+        />
       </div>
     );
   }
@@ -876,9 +891,22 @@ function AnnotatePage() {
         >
           <RotateCcw className="w-4 h-4" /> New
         </button>
-        <span className="text-sm font-medium text-neutral-400">
-          {annotations.length} tag{annotations.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex flex-col items-center leading-tight">
+          <span className="text-sm font-medium text-neutral-400">
+            {annotations.length} tag{annotations.length === 1 ? "" : "s"}
+          </span>
+          {!usage.unlocked && (
+            <button
+              onClick={() => usage.setPaywallOpen(true)}
+              className="text-[10px] text-yellow-400 hover:underline"
+            >
+              {usage.remaining}/{FREE_LIMIT} free AI tags
+            </button>
+          )}
+          {usage.unlocked && (
+            <span className="text-[10px] text-yellow-400">✓ Unlimited</span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={undo}
@@ -1209,6 +1237,11 @@ function AnnotatePage() {
           </button>
         </div>
       )}
+      <PaywallDialog
+        open={usage.paywallOpen}
+        onOpenChange={usage.setPaywallOpen}
+        onUnlock={usage.unlock}
+      />
     </div>
   );
 }
