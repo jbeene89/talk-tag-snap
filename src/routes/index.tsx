@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
+import { useAiUsage, FREE_LIMIT } from "@/lib/usage";
+import { PaywallDialog } from "@/components/PaywallDialog";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -74,6 +76,8 @@ function AnnotatePage() {
   const scan = useServerFn(scanObjects);
   const identify = useServerFn(identifyAtPoint);
   const identifyBox = useServerFn(identifyInBox);
+
+  const usage = useAiUsage();
 
   const [tapMode, setTapMode] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
