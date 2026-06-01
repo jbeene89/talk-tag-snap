@@ -8,7 +8,8 @@
 // so we expose a "dev unlock" so the gating UI is still testable. The real
 // purchase only runs in the published Android app.
 
-import { Capacitor } from "@capacitor/core";
+// Note: @capacitor/core is imported dynamically inside isNative() so this
+// module is safe to evaluate during SSR (where `window` doesn't exist).
 
 // RevenueCat entitlement identifier — must match what you create in the
 // RevenueCat dashboard (Entitlements → "unlimited").
@@ -30,7 +31,10 @@ let initialized = false;
 let initializing: Promise<void> | null = null;
 
 export function isNative(): boolean {
+  if (typeof window === "undefined") return false;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Capacitor } = require("@capacitor/core");
     return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
   } catch {
     return false;
