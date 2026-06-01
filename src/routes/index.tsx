@@ -870,6 +870,11 @@ function AnnotatePage() {
             e.target.value = "";
           }}
         />
+        <PaywallDialog
+          open={usage.paywallOpen}
+          onOpenChange={usage.setPaywallOpen}
+          onUnlock={usage.unlock}
+        />
       </div>
     );
   }
@@ -1232,6 +1237,11 @@ function AnnotatePage() {
           </button>
         </div>
       )}
+      <PaywallDialog
+        open={usage.paywallOpen}
+        onOpenChange={usage.setPaywallOpen}
+        onUnlock={usage.unlock}
+      />
     </div>
   );
 }
