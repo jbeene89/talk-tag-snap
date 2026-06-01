@@ -922,6 +922,7 @@ function AnnotatePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
+      <h1 className="sr-only">Tag defects in your photo</h1>
       <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
         <button
           onClick={reset}
