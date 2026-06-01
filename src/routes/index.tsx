@@ -36,6 +36,12 @@ export const Route = createFileRoute("/")({
         content:
           "Snap a photo of broken things or construction mistakes. AI outlines the spot, you describe the problem.",
       },
+      { property: "og:title", content: "Tag Defects — Tap, Outline, Describe" },
+      {
+        property: "og:description",
+        content:
+          "Snap a photo, AI outlines the defect, you describe what's wrong with your voice. Share a tagged image in seconds.",
+      },
     ],
   }),
 });
