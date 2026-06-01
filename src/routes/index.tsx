@@ -886,9 +886,22 @@ function AnnotatePage() {
         >
           <RotateCcw className="w-4 h-4" /> New
         </button>
-        <span className="text-sm font-medium text-neutral-400">
-          {annotations.length} tag{annotations.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex flex-col items-center leading-tight">
+          <span className="text-sm font-medium text-neutral-400">
+            {annotations.length} tag{annotations.length === 1 ? "" : "s"}
+          </span>
+          {!usage.unlocked && (
+            <button
+              onClick={() => usage.setPaywallOpen(true)}
+              className="text-[10px] text-yellow-400 hover:underline"
+            >
+              {usage.remaining}/{FREE_LIMIT} free AI tags
+            </button>
+          )}
+          {usage.unlocked && (
+            <span className="text-[10px] text-yellow-400">✓ Unlimited</span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={undo}
