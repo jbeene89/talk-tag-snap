@@ -18,11 +18,13 @@ import {
   ClipboardCopy,
   ClipboardCheck,
   ImagePlus,
+  Video as VideoIcon,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
 import { useAiUsage, FREE_LIMIT } from "@/lib/usage";
 import { PaywallDialog } from "@/components/PaywallDialog";
+import { VideoFramePicker } from "@/components/VideoFramePicker";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -105,6 +107,8 @@ function AnnotatePage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
@@ -842,8 +846,15 @@ function AnnotatePage() {
             <ImagePlus className="w-5 h-5" />
             <span className="text-base font-medium">Upload from device</span>
           </button>
+          <button
+            onClick={() => videoInputRef.current?.click()}
+            className="w-full max-w-xs py-4 rounded-2xl bg-neutral-800 text-neutral-100 flex items-center justify-center gap-2 border border-neutral-700 active:scale-95 transition-transform"
+          >
+            <VideoIcon className="w-5 h-5" />
+            <span className="text-base font-medium">Pick frame from video</span>
+          </button>
           <p className="text-xs text-neutral-500 mt-2 text-center max-w-xs">
-            Take a new photo, or upload one you already have.
+            Take a new photo, upload one you already have, or scrub a video to grab any frame.
           </p>
         </div>
 
@@ -870,10 +881,31 @@ function AnnotatePage() {
             e.target.value = "";
           }}
         />
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) setVideoFile(f);
+            e.target.value = "";
+          }}
+        />
+        {videoFile && (
+          <VideoFramePicker
+            videoFile={videoFile}
+            onCancel={() => setVideoFile(null)}
+            onPickFrame={(frame) => {
+              setVideoFile(null);
+              handleFile(frame);
+            }}
+          />
+        )}
         <PaywallDialog
           open={usage.paywallOpen}
           onOpenChange={usage.setPaywallOpen}
-          onUnlock={usage.unlock}
+          onUnlocked={usage.markUnlocked}
         />
       </div>
     );
@@ -1240,7 +1272,7 @@ function AnnotatePage() {
       <PaywallDialog
         open={usage.paywallOpen}
         onOpenChange={usage.setPaywallOpen}
-        onUnlock={usage.unlock}
+        onUnlocked={usage.markUnlocked}
       />
     </div>
   );
