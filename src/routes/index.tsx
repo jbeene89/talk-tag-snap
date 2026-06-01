@@ -1272,7 +1272,7 @@ function AnnotatePage() {
       <PaywallDialog
         open={usage.paywallOpen}
         onOpenChange={usage.setPaywallOpen}
-        onUnlock={usage.unlock}
+        onUnlocked={usage.markUnlocked}
       />
     </div>
   );
