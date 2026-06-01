@@ -4,7 +4,9 @@ export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
       { title: "Privacy Policy — SoupyTag" },
-      { name: "description", content: "Privacy policy for the SoupyTag app." },
+      { name: "description", content: "Review the SoupyTag Privacy Policy to understand how we protect your photos, voice annotations, and AI tagging data." },
+      { property: "og:title", content: "Privacy Policy — SoupyTag" },
+      { property: "og:description", content: "How SoupyTag handles your photos, voice notes, and AI tagging data — what stays on your device and what doesn't." },
     ],
   }),
   component: PrivacyPage,
@@ -12,7 +14,7 @@ export const Route = createFileRoute("/privacy")({
 
 function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12 text-foreground">
+    <div className="mx-auto max-w-2xl px-6 py-12 text-foreground">
       <Link to="/" className="text-sm text-muted-foreground hover:underline">
         ← Back to app
       </Link>
