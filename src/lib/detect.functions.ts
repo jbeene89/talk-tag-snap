@@ -252,7 +252,7 @@ export const identifyAtPoint = createServerFn({ method: "POST" })
 
     try {
       const res = await callGateway(apiKey, {
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: system },
           {
@@ -318,16 +318,17 @@ export const identifyInBox = createServerFn({ method: "POST" })
 
     const system =
       "You identify the single most prominent object inside a region the user drew on a photo. The region is given as " +
-      "normalized percentages (x, y, width, height) from the top-left. Focus on what is inside that rectangle — it is a hint, " +
-      "not an exact crop. Identify the distinct object, equipment, fixture, or part (a board, pole, lift component, device, panel, etc.). " +
+      "normalized percentages (x, y, width, height) from the top-left. The drawn region is a STRONG hint — the target object " +
+      "is inside it or only slightly overlapping its edges. Do NOT return a box covering most of the image. " +
       'Return ONLY: {"label": string, "box_2d": [ymin, xmin, ymax, xmax]} ' +
-      "where box_2d coordinates are integers normalized to 0-1000 (top-left origin) of a tight bounding box around that object in the FULL image (not the region). " +
+      "where box_2d coordinates are integers 0-1000 (top-left origin) of a TIGHT bounding box around that object in the full image. " +
+      "The returned box should be close in size to the drawn region — never more than ~2x larger in area. " +
       'If nothing identifiable is inside the region, return {"label": "", "box_2d": null}. Use a short specific label (2-4 words). ' +
       "No prose, no markdown.";
 
     try {
       const res = await callGateway(apiKey, {
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: system },
           {
@@ -335,7 +336,7 @@ export const identifyInBox = createServerFn({ method: "POST" })
             content: [
               {
                 type: "text",
-                text: `The user drew a box at x=${rx}%, y=${ry}%, width=${rw}%, height=${rh}% (from top-left of the image). Identify the main object inside it and return its bounding box.`,
+                text: `The user drew a box at x=${rx}%, y=${ry}%, width=${rw}%, height=${rh}% (from top-left of the image). Identify the main object inside it and return a tight bounding box around it.`,
               },
               { type: "image_url", image_url: { url: `data:${data.mimeType};base64,${base64}` } },
             ],
@@ -351,11 +352,47 @@ export const identifyInBox = createServerFn({ method: "POST" })
 
       const json = await res.json();
       const parsed = parseJson(json?.choices?.[0]?.message?.content ?? "") ?? {};
-      const box = extractBox(parsed);
+      let box = extractBox(parsed);
+
+      // Sanity-check the AI box against the user's drawn region.
+      // If it's wildly bigger or barely overlaps, fall back to the user's region.
+      if (box) {
+        const userArea = r.w * r.h;
+        const aiArea = box.w * box.h;
+        const ix = Math.max(box.x, r.x);
+        const iy = Math.max(box.y, r.y);
+        const ix2 = Math.min(box.x + box.w, r.x + r.w);
+        const iy2 = Math.min(box.y + box.h, r.y + r.h);
+        const interArea = Math.max(0, ix2 - ix) * Math.max(0, iy2 - iy);
+        const overlapWithUser = userArea > 0 ? interArea / userArea : 0;
+
+        // Too big (>3x drawn region) OR doesn't cover at least 30% of what user drew → use user's box.
+        if (aiArea > userArea * 3 || overlapWithUser < 0.3) {
+          box = { ...r };
+        } else {
+          // Clip the AI box to a generous expansion of the user's region (50% padding).
+          const pad = 0.5;
+          const minX = Math.max(0, r.x - r.w * pad);
+          const minY = Math.max(0, r.y - r.h * pad);
+          const maxX = Math.min(1, r.x + r.w * (1 + pad));
+          const maxY = Math.min(1, r.y + r.h * (1 + pad));
+          const cx = Math.max(minX, box.x);
+          const cy = Math.max(minY, box.y);
+          const cx2 = Math.min(maxX, box.x + box.w);
+          const cy2 = Math.min(maxY, box.y + box.h);
+          if (cx2 > cx && cy2 > cy) {
+            box = { x: cx, y: cy, w: cx2 - cx, h: cy2 - cy };
+          } else {
+            box = { ...r };
+          }
+        }
+      }
+
       return { box, label: parsed.label || "" };
     } catch (err) {
       console.error("identifyInBox failed", err);
       return { box: null, label: "", error: "Could not reach AI service." };
     }
   });
+
 
