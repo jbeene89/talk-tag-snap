@@ -150,6 +150,7 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
             disabled={!ready}
             onChange={(e) => handleSeek(Number(e.target.value))}
             className="flex-1 accent-yellow-400"
+            aria-label="Seek video to pick a frame"
           />
           <span>{formatTime(duration)}</span>
         </div>
