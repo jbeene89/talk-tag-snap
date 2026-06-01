@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { checkUnlocked } from "./billing";
 
 const COUNT_KEY = "soupytag:ai:count:v1";
-const UNLOCK_KEY = "soupytag:ai:unlocked:v1";
 
 export const FREE_LIMIT = 5;
 
@@ -15,53 +15,52 @@ function readCount(): number {
   }
 }
 
-function readUnlocked(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(UNLOCK_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 export function useAiUsage() {
   const [count, setCount] = useState(0);
   const [unlocked, setUnlocked] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
 
+  // Initial load: read counter, ask billing service whether this device is unlocked.
   useEffect(() => {
     setCount(readCount());
-    setUnlocked(readUnlocked());
+    checkUnlocked()
+      .then(setUnlocked)
+      .catch(() => setUnlocked(false));
   }, []);
 
   const remaining = Math.max(0, FREE_LIMIT - count);
 
   // Returns true if the caller may proceed; false if the paywall opened.
   const requestAiCall = useCallback((): boolean => {
-    if (readUnlocked()) return true;
+    if (unlocked) return true;
     if (readCount() >= FREE_LIMIT) {
       setPaywallOpen(true);
       return false;
     }
     return true;
-  }, []);
+  }, [unlocked]);
 
   // Call after a successful AI request.
   const recordAiCall = useCallback(() => {
-    if (readUnlocked()) return;
+    if (unlocked) return;
     const next = readCount() + 1;
     try {
       localStorage.setItem(COUNT_KEY, String(next));
     } catch {}
     setCount(next);
-  }, []);
+  }, [unlocked]);
 
-  const unlock = useCallback(() => {
-    try {
-      localStorage.setItem(UNLOCK_KEY, "1");
-    } catch {}
+  // Called by the paywall after a successful purchase or restore.
+  const markUnlocked = useCallback(() => {
     setUnlocked(true);
     setPaywallOpen(false);
+  }, []);
+
+  // Re-check entitlement from the billing service (e.g. after restore).
+  const refreshUnlock = useCallback(async () => {
+    const ok = await checkUnlocked();
+    setUnlocked(ok);
+    return ok;
   }, []);
 
   return {
@@ -72,6 +71,7 @@ export function useAiUsage() {
     setPaywallOpen,
     requestAiCall,
     recordAiCall,
-    unlock,
+    markUnlocked,
+    refreshUnlock,
   };
 }
