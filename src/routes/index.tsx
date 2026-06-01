@@ -1031,7 +1031,7 @@ function AnnotatePage() {
         >
           <img
             src={imageDataUrl}
-            alt="Captured"
+            alt="Photo being annotated for defect tagging"
             className="block max-h-[calc(100vh-300px)] max-w-full object-contain select-none pointer-events-none"
             draggable={false}
           />
