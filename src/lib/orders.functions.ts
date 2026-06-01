@@ -54,7 +54,6 @@ export const createOrderCheckout = createServerFn({ method: "POST" })
         ui_mode: "embedded_page",
         return_url: data.returnUrl,
         customer_email: (order.customer_email as string) ?? undefined,
-        managed_payments: { enabled: true },
         payment_intent_data: {
           description: `WrapKit Cloud — ${order.app_name}`,
         },
@@ -62,7 +61,9 @@ export const createOrderCheckout = createServerFn({ method: "POST" })
           order_id: order.id as string,
           managed_payments: "true",
         },
-      });
+        // Stripe SDK types lag behind the API; managed_payments is supported.
+        managed_payments: { enabled: true },
+      } as any);
 
       // Stamp the order with the session id for cross-reference in the admin.
       await supabaseAdmin
@@ -173,7 +174,7 @@ export const updateOrder = createServerFn({ method: "POST" })
 
     const { error } = await supabaseAdmin
       .from("orders")
-      .update(patch)
+      .update(patch as any)
       .eq("id", data.orderId);
     if (error) throw new Error(error.message);
     return { ok: true };
