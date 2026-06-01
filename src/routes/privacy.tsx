@@ -78,6 +78,6 @@ function PrivacyPage() {
           .
         </p>
       </section>
-    </main>
+    </div>
   );
 }
