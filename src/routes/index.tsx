@@ -344,6 +344,7 @@ function AnnotatePage() {
 
   const handleAutoScan = async () => {
     if (!imageDataUrl || processing) return;
+    if (!usage.requestAiCall()) return;
     setProcessing(true);
     setBusyText("Scanning photo…");
     setError(null);
@@ -354,6 +355,7 @@ function AnnotatePage() {
       if (!result.items.length) {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
       } else {
+        usage.recordAiCall();
         setScanPreview(result.items);
       }
     } catch (e) {
@@ -395,6 +397,7 @@ function AnnotatePage() {
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    if (!usage.requestAiCall()) return;
     setProcessing(true);
     setBusyText("Outlining tapped spot…");
     setError(null);
