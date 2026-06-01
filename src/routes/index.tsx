@@ -420,6 +420,7 @@ function AnnotatePage() {
       } else {
         addAnnotationAndSelect(result.box);
       }
+      if (!result.error) usage.recordAiCall();
     } catch (err) {
       console.error(err);
       setError("Something went wrong. Try again.");
@@ -476,6 +477,7 @@ function AnnotatePage() {
     // Use the drawn box exactly as-is. Ask AI for a label only, never resize/move.
     addAnnotationAndSelect(userBox);
     setError(null);
+    if (!usage.requestAiCall()) return;
     try {
       const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
       const result = await identifyBox({
@@ -487,6 +489,7 @@ function AnnotatePage() {
           prev.map((a) => (a.box === userBox || (a.box.x === userBox.x && a.box.y === userBox.y && a.box.w === userBox.w && a.box.h === userBox.h) ? { ...a, label: a.label || label } : a)),
         );
       }
+      if (!result?.error) usage.recordAiCall();
     } catch (err) {
       console.error(err);
     }
