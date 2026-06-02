@@ -20,6 +20,7 @@ import {
   ImagePlus,
   Video as VideoIcon,
   Clock,
+  Globe,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
@@ -81,13 +82,25 @@ const SEV_TEXT: Record<Severity, string> = {
 };
 const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
-function formatStamp(d: Date): string {
+function formatStamp(d: Date, useUTC: boolean): string {
+  if (useUTC) {
+    return d.toLocaleString("en-US", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  }
   return d.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
 }
 
@@ -129,6 +142,7 @@ function AnnotatePage() {
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [videoResumeTime, setVideoResumeTime] = useState(0);
   const [includeTimestamp, setIncludeTimestamp] = useState(false);
+  const [useUTC, setUseUTC] = useState(false);
   const [capturedAt, setCapturedAt] = useState<Date | null>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
@@ -718,7 +732,7 @@ function AnnotatePage() {
       const lines = curr.map(
         (a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`,
       );
-      const header = includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt)}\n\n` : "";
+      const header = includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt, useUTC)}\n\n` : "";
       const text = header + lines.join("\n");
       navigator.clipboard
         ?.writeText(text)
@@ -829,7 +843,7 @@ function AnnotatePage() {
       const stampSize = Math.max(18, Math.round(imageSize.w * 0.024));
       ctx.font = `600 ${stampSize}px system-ui, -apple-system, sans-serif`;
       ctx.textBaseline = "bottom";
-      const stamp = formatStamp(capturedAt);
+      const stamp = formatStamp(capturedAt, useUTC);
       const pad = stampSize * 0.5;
       const tw = ctx.measureText(stamp).width + pad * 2;
       const th = stampSize + pad * 1.2;
@@ -1030,12 +1044,23 @@ function AnnotatePage() {
             aria-label={includeTimestamp ? "Timestamp on" : "Timestamp off"}
             title={
               capturedAt
-                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt)}`
+                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt, useUTC)} (${useUTC ? "UTC" : "Local"})`
                 : "Add timestamp to exported image and copied text"
             }
           >
             <Clock className="w-4 h-4" />
           </button>
+          {includeTimestamp && (
+            <button
+              onClick={() => setUseUTC((v) => !v)}
+              className="p-2 rounded-lg bg-neutral-800 text-neutral-200 active:bg-neutral-700"
+              aria-label={useUTC ? "Switch to local time" : "Switch to UTC"}
+              title={useUTC ? "UTC time — click for local" : "Local time — click for UTC"}
+            >
+              <Globe className="w-4 h-4" />
+              <span className="sr-only">{useUTC ? "UTC" : "Local"}</span>
+            </button>
+          )}
           <button
             onClick={copyAsText}
             disabled={annotations.length === 0}
