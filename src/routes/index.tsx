@@ -1050,6 +1050,17 @@ function AnnotatePage() {
           >
             <Clock className="w-4 h-4" />
           </button>
+          {includeTimestamp && (
+            <button
+              onClick={() => setUseUTC((v) => !v)}
+              className="p-2 rounded-lg bg-neutral-800 text-neutral-200 active:bg-neutral-700"
+              aria-label={useUTC ? "Switch to local time" : "Switch to UTC"}
+              title={useUTC ? "UTC time — click for local" : "Local time — click for UTC"}
+            >
+              <Globe className="w-4 h-4" />
+              <span className="sr-only">{useUTC ? "UTC" : "Local"}</span>
+            </button>
+          )}
           <button
             onClick={copyAsText}
             disabled={annotations.length === 0}
