@@ -21,7 +21,7 @@ function formatTime(seconds: number): string {
  * That frame is handed back to the parent as a JPEG File, which then flows
  * into the normal photo-tagging pipeline.
  */
-export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
+export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickFrame }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [duration, setDuration] = useState(0);
