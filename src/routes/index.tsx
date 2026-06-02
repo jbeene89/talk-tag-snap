@@ -20,6 +20,7 @@ import {
   ImagePlus,
   Video as VideoIcon,
   Clock,
+  Globe,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
@@ -81,13 +82,25 @@ const SEV_TEXT: Record<Severity, string> = {
 };
 const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
-function formatStamp(d: Date): string {
+function formatStamp(d: Date, useUTC: boolean): string {
+  if (useUTC) {
+    return d.toLocaleString("en-US", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  }
   return d.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
 }
 
@@ -129,6 +142,7 @@ function AnnotatePage() {
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [videoResumeTime, setVideoResumeTime] = useState(0);
   const [includeTimestamp, setIncludeTimestamp] = useState(false);
+  const [useUTC, setUseUTC] = useState(false);
   const [capturedAt, setCapturedAt] = useState<Date | null>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
