@@ -136,9 +136,11 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
           ref={videoRef}
           src={videoUrl.current}
           onLoadedMetadata={handleLoaded}
+          onLoadedData={handleLoaded}
           onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
           playsInline
           muted
+          controls
           preload="auto"
           className="max-h-full max-w-full"
         />
