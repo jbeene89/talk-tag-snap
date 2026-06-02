@@ -118,6 +118,8 @@ function AnnotatePage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [videoResumeTime, setVideoResumeTime] = useState(0);
+  const [includeTimestamp, setIncludeTimestamp] = useState(false);
+  const [capturedAt, setCapturedAt] = useState<Date | null>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
