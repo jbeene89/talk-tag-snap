@@ -81,6 +81,16 @@ const SEV_TEXT: Record<Severity, string> = {
 };
 const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
+function formatStamp(d: Date): string {
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function AnnotatePage() {
   const scan = useServerFn(scanObjects);
   const identify = useServerFn(identifyAtPoint);
