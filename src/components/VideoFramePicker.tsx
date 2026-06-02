@@ -40,6 +40,13 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
     if (!v) return;
     setDuration(v.duration || 0);
     setReady(true);
+    // Nudge currentTime so iOS/Android actually paints the first frame
+    // instead of showing a black box until the user scrubs.
+    try {
+      v.currentTime = 0.001;
+    } catch {
+      // ignore
+    }
   };
 
   const handleSeek = (value: number) => {
@@ -129,9 +136,11 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
           ref={videoRef}
           src={videoUrl.current}
           onLoadedMetadata={handleLoaded}
+          onLoadedData={handleLoaded}
           onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
           playsInline
           muted
+          controls
           preload="auto"
           className="max-h-full max-w-full"
         />
