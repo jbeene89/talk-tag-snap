@@ -1023,6 +1023,20 @@ function AnnotatePage() {
             <Redo2 className="w-4 h-4" />
           </button>
           <button
+            onClick={() => setIncludeTimestamp((v) => !v)}
+            className={`p-2 rounded-lg active:bg-neutral-700 ${
+              includeTimestamp ? "bg-yellow-400 text-neutral-950" : "bg-neutral-800 text-neutral-200"
+            }`}
+            aria-label={includeTimestamp ? "Timestamp on" : "Timestamp off"}
+            title={
+              capturedAt
+                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt)}`
+                : "Add timestamp to exported image and copied text"
+            }
+          >
+            <Clock className="w-4 h-4" />
+          </button>
+          <button
             onClick={copyAsText}
             disabled={annotations.length === 0}
             className="p-2 rounded-lg bg-neutral-800 disabled:opacity-40 active:bg-neutral-700"
