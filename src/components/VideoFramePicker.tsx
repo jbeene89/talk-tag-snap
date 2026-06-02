@@ -113,7 +113,7 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
         return;
       }
       const file = new File([blob], `frame-${Date.now()}.jpg`, { type: "image/jpeg" });
-      onPickFrame(file);
+      onPickFrame(file, v.currentTime || 0);
     } catch (err) {
       console.error(err);
       setError("Something went wrong reading the video.");
