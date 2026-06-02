@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 
 type Props = {
   videoFile: File;
+  initialTime?: number;
   onCancel: () => void;
-  onPickFrame: (frameFile: File) => void;
+  onPickFrame: (frameFile: File, atTime: number) => void;
 };
 
 function formatTime(seconds: number): string {
@@ -20,7 +21,7 @@ function formatTime(seconds: number): string {
  * That frame is handed back to the parent as a JPEG File, which then flows
  * into the normal photo-tagging pipeline.
  */
-export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
+export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickFrame }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [duration, setDuration] = useState(0);
@@ -44,7 +45,9 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
     // Nudge currentTime so iOS/Android actually paints the first frame
     // instead of showing a black box until the user scrubs.
     try {
-      v.currentTime = 0.001;
+      const start = initialTime > 0 ? Math.min(initialTime, (v.duration || initialTime)) : 0.001;
+      v.currentTime = start;
+      setCurrent(start);
     } catch {
       // ignore
     }
@@ -110,7 +113,7 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
         return;
       }
       const file = new File([blob], `frame-${Date.now()}.jpg`, { type: "image/jpeg" });
-      onPickFrame(file);
+      onPickFrame(file, v.currentTime || 0);
     } catch (err) {
       console.error(err);
       setError("Something went wrong reading the video.");

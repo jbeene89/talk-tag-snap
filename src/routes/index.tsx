@@ -115,6 +115,8 @@ function AnnotatePage() {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [showVideoPicker, setShowVideoPicker] = useState(false);
+  const [videoResumeTime, setVideoResumeTime] = useState(0);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +264,7 @@ function AnnotatePage() {
     setFuture([]);
     setSelectedId(null);
     setCaptionDraft("");
+    setScanPreview(null);
     setZoom({ s: 1, x: 0, y: 0 });
 
     const reader = new FileReader();
@@ -747,6 +750,10 @@ function AnnotatePage() {
     setTapMode(false);
     setBoxMode(false);
     setZoom({ s: 1, x: 0, y: 0 });
+    setScanPreview(null);
+    setVideoFile(null);
+    setShowVideoPicker(false);
+    setVideoResumeTime(0);
   };
 
   // ---- Export ----
@@ -894,16 +901,22 @@ function AnnotatePage() {
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) setVideoFile(f);
+            if (f) {
+              setVideoFile(f);
+              setVideoResumeTime(0);
+              setShowVideoPicker(true);
+            }
             e.target.value = "";
           }}
         />
-        {videoFile && (
+        {videoFile && showVideoPicker && (
           <VideoFramePicker
             videoFile={videoFile}
-            onCancel={() => setVideoFile(null)}
-            onPickFrame={(frame) => {
-              setVideoFile(null);
+            initialTime={videoResumeTime}
+            onCancel={() => setShowVideoPicker(false)}
+            onPickFrame={(frame, atTime) => {
+              setShowVideoPicker(false);
+              setVideoResumeTime(atTime);
               handleFile(frame);
             }}
           />
@@ -924,12 +937,23 @@ function AnnotatePage() {
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
       <h1 className="sr-only">Tag defects in your photo</h1>
       <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
-        <button
-          onClick={reset}
-          className="flex items-center gap-1.5 text-sm text-neutral-300 active:text-white"
-        >
-          <RotateCcw className="w-4 h-4" /> New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={reset}
+            className="flex items-center gap-1.5 text-sm text-neutral-300 active:text-white"
+          >
+            <RotateCcw className="w-4 h-4" /> New
+          </button>
+          {videoFile && (
+            <button
+              onClick={() => setShowVideoPicker(true)}
+              className="flex items-center gap-1 text-xs text-yellow-400 active:text-yellow-300 px-2 py-1 rounded-md bg-neutral-800"
+              title="Pick another frame from the same video"
+            >
+              <VideoIcon className="w-3.5 h-3.5" /> Video
+            </button>
+          )}
+        </div>
         <div className="flex flex-col items-center leading-tight">
           <span className="text-sm font-medium text-neutral-400">
             {annotations.length} tag{annotations.length === 1 ? "" : "s"}
