@@ -750,6 +750,10 @@ function AnnotatePage() {
     setTapMode(false);
     setBoxMode(false);
     setZoom({ s: 1, x: 0, y: 0 });
+    setScanPreview(null);
+    setVideoFile(null);
+    setShowVideoPicker(false);
+    setVideoResumeTime(0);
   };
 
   // ---- Export ----
