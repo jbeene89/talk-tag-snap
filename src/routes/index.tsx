@@ -843,7 +843,7 @@ function AnnotatePage() {
       const stampSize = Math.max(18, Math.round(imageSize.w * 0.024));
       ctx.font = `600 ${stampSize}px system-ui, -apple-system, sans-serif`;
       ctx.textBaseline = "bottom";
-      const stamp = formatStamp(capturedAt);
+      const stamp = formatStamp(capturedAt, useUTC);
       const pad = stampSize * 0.5;
       const tw = ctx.measureText(stamp).width + pad * 2;
       const th = stampSize + pad * 1.2;
@@ -1044,7 +1044,7 @@ function AnnotatePage() {
             aria-label={includeTimestamp ? "Timestamp on" : "Timestamp off"}
             title={
               capturedAt
-                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt)}`
+                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt, useUTC)} (${useUTC ? "UTC" : "Local"})`
                 : "Add timestamp to exported image and copied text"
             }
           >
