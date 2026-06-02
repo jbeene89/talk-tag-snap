@@ -19,6 +19,7 @@ import {
   ClipboardCheck,
   ImagePlus,
   Video as VideoIcon,
+  Clock,
 } from "lucide-react";
 
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
@@ -80,6 +81,16 @@ const SEV_TEXT: Record<Severity, string> = {
 };
 const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
+function formatStamp(d: Date): string {
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function AnnotatePage() {
   const scan = useServerFn(scanObjects);
   const identify = useServerFn(identifyAtPoint);
@@ -117,6 +128,8 @@ function AnnotatePage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [videoResumeTime, setVideoResumeTime] = useState(0);
+  const [includeTimestamp, setIncludeTimestamp] = useState(false);
+  const [capturedAt, setCapturedAt] = useState<Date | null>(null);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
@@ -266,6 +279,7 @@ function AnnotatePage() {
     setCaptionDraft("");
     setScanPreview(null);
     setZoom({ s: 1, x: 0, y: 0 });
+    setCapturedAt(new Date());
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -704,7 +718,8 @@ function AnnotatePage() {
       const lines = curr.map(
         (a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`,
       );
-      const text = lines.join("\n");
+      const header = includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt)}\n\n` : "";
+      const text = header + lines.join("\n");
       navigator.clipboard
         ?.writeText(text)
         .then(() => {
@@ -754,6 +769,7 @@ function AnnotatePage() {
     setVideoFile(null);
     setShowVideoPicker(false);
     setVideoResumeTime(0);
+    setCapturedAt(null);
   };
 
   // ---- Export ----
@@ -808,6 +824,23 @@ function AnnotatePage() {
       ctx.fillStyle = sev === "major" ? "#ffffff" : "#111827";
       ctx.fillText(label, x + pad, ty + pad * 0.6);
     });
+
+    if (includeTimestamp && capturedAt) {
+      const stampSize = Math.max(18, Math.round(imageSize.w * 0.024));
+      ctx.font = `600 ${stampSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textBaseline = "bottom";
+      const stamp = formatStamp(capturedAt);
+      const pad = stampSize * 0.5;
+      const tw = ctx.measureText(stamp).width + pad * 2;
+      const th = stampSize + pad * 1.2;
+      const sx = imageSize.w - tw - pad;
+      const sy = imageSize.h - pad;
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(sx, sy - th, tw, th);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(stamp, sx + pad, sy - pad * 0.4);
+      ctx.textBaseline = "top";
+    }
 
     canvas.toBlob(
       async (blob) => {
@@ -988,6 +1021,20 @@ function AnnotatePage() {
             title="Redo (Ctrl/Cmd+Shift+Z)"
           >
             <Redo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIncludeTimestamp((v) => !v)}
+            className={`p-2 rounded-lg active:bg-neutral-700 ${
+              includeTimestamp ? "bg-yellow-400 text-neutral-950" : "bg-neutral-800 text-neutral-200"
+            }`}
+            aria-label={includeTimestamp ? "Timestamp on" : "Timestamp off"}
+            title={
+              capturedAt
+                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt)}`
+                : "Add timestamp to exported image and copied text"
+            }
+          >
+            <Clock className="w-4 h-4" />
           </button>
           <button
             onClick={copyAsText}
