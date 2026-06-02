@@ -115,6 +115,8 @@ function AnnotatePage() {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [showVideoPicker, setShowVideoPicker] = useState(false);
+  const [videoResumeTime, setVideoResumeTime] = useState(0);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
