@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 
 type Props = {
   videoFile: File;
+  initialTime?: number;
   onCancel: () => void;
-  onPickFrame: (frameFile: File) => void;
+  onPickFrame: (frameFile: File, atTime: number) => void;
 };
 
 function formatTime(seconds: number): string {
