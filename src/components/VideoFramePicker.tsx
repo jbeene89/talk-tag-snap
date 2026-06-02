@@ -29,10 +29,11 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
   const [grabbing, setGrabbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const videoUrl = useRef<string>("");
+  const [videoUrl, setVideoUrl] = useState<string>("");
   useEffect(() => {
-    videoUrl.current = URL.createObjectURL(videoFile);
-    return () => URL.revokeObjectURL(videoUrl.current);
+    const url = URL.createObjectURL(videoFile);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
   }, [videoFile]);
 
   const handleLoaded = () => {
