@@ -45,7 +45,9 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
     // Nudge currentTime so iOS/Android actually paints the first frame
     // instead of showing a black box until the user scrubs.
     try {
-      v.currentTime = 0.001;
+      const start = initialTime > 0 ? Math.min(initialTime, (v.duration || initialTime)) : 0.001;
+      v.currentTime = start;
+      setCurrent(start);
     } catch {
       // ignore
     }
