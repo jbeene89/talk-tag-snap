@@ -901,16 +901,22 @@ function AnnotatePage() {
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) setVideoFile(f);
+            if (f) {
+              setVideoFile(f);
+              setVideoResumeTime(0);
+              setShowVideoPicker(true);
+            }
             e.target.value = "";
           }}
         />
-        {videoFile && (
+        {videoFile && showVideoPicker && (
           <VideoFramePicker
             videoFile={videoFile}
-            onCancel={() => setVideoFile(null)}
-            onPickFrame={(frame) => {
-              setVideoFile(null);
+            initialTime={videoResumeTime}
+            onCancel={() => setShowVideoPicker(false)}
+            onPickFrame={(frame, atTime) => {
+              setShowVideoPicker(false);
+              setVideoResumeTime(atTime);
               handleFile(frame);
             }}
           />
