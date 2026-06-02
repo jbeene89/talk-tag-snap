@@ -814,6 +814,23 @@ function AnnotatePage() {
       ctx.fillText(label, x + pad, ty + pad * 0.6);
     });
 
+    if (includeTimestamp && capturedAt) {
+      const stampSize = Math.max(18, Math.round(imageSize.w * 0.024));
+      ctx.font = `600 ${stampSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textBaseline = "bottom";
+      const stamp = formatStamp(capturedAt);
+      const pad = stampSize * 0.5;
+      const tw = ctx.measureText(stamp).width + pad * 2;
+      const th = stampSize + pad * 1.2;
+      const sx = imageSize.w - tw - pad;
+      const sy = imageSize.h - pad;
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(sx, sy - th, tw, th);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(stamp, sx + pad, sy - pad * 0.4);
+      ctx.textBaseline = "top";
+    }
+
     canvas.toBlob(
       async (blob) => {
         if (!blob) return;
