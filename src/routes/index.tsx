@@ -758,6 +758,7 @@ function AnnotatePage() {
     setVideoFile(null);
     setShowVideoPicker(false);
     setVideoResumeTime(0);
+    setCapturedAt(null);
   };
 
   // ---- Export ----
