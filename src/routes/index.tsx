@@ -937,12 +937,23 @@ function AnnotatePage() {
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
       <h1 className="sr-only">Tag defects in your photo</h1>
       <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
-        <button
-          onClick={reset}
-          className="flex items-center gap-1.5 text-sm text-neutral-300 active:text-white"
-        >
-          <RotateCcw className="w-4 h-4" /> New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={reset}
+            className="flex items-center gap-1.5 text-sm text-neutral-300 active:text-white"
+          >
+            <RotateCcw className="w-4 h-4" /> New
+          </button>
+          {videoFile && (
+            <button
+              onClick={() => setShowVideoPicker(true)}
+              className="flex items-center gap-1 text-xs text-yellow-400 active:text-yellow-300 px-2 py-1 rounded-md bg-neutral-800"
+              title="Pick another frame from the same video"
+            >
+              <VideoIcon className="w-3.5 h-3.5" /> Video
+            </button>
+          )}
+        </div>
         <div className="flex flex-col items-center leading-tight">
           <span className="text-sm font-medium text-neutral-400">
             {annotations.length} tag{annotations.length === 1 ? "" : "s"}
