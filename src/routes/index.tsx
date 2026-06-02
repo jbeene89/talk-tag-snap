@@ -732,7 +732,7 @@ function AnnotatePage() {
       const lines = curr.map(
         (a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`,
       );
-      const header = includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt)}\n\n` : "";
+      const header = includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt, useUTC)}\n\n` : "";
       const text = header + lines.join("\n");
       navigator.clipboard
         ?.writeText(text)
