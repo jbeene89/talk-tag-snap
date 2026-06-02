@@ -82,6 +82,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "SoupyTag — Photo Defect Tagging with Voice & AI" },
       { name: "twitter:description", content: "Snap a photo, tap the defect, describe it with your voice. SoupyTag turns inspections into shareable tagged images in seconds." },
+      { name: "google-site-verification", content: "GrHJUY2_JwdZpv_x1Qk2LUrpdOvQNMcZardiZcwvxRc" },
     ],
     links: [
       {
