@@ -29,10 +29,11 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
   const [grabbing, setGrabbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const videoUrl = useRef<string>("");
+  const [videoUrl, setVideoUrl] = useState<string>("");
   useEffect(() => {
-    videoUrl.current = URL.createObjectURL(videoFile);
-    return () => URL.revokeObjectURL(videoUrl.current);
+    const url = URL.createObjectURL(videoFile);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
   }, [videoFile]);
 
   const handleLoaded = () => {
@@ -134,7 +135,7 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
       <div className="flex-1 flex items-center justify-center bg-black overflow-hidden">
         <video
           ref={videoRef}
-          src={videoUrl.current}
+          src={videoUrl}
           onLoadedMetadata={handleLoaded}
           onLoadedData={handleLoaded}
           onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
