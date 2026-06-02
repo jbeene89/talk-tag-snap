@@ -135,7 +135,7 @@ export function VideoFramePicker({ videoFile, onCancel, onPickFrame }: Props) {
       <div className="flex-1 flex items-center justify-center bg-black overflow-hidden">
         <video
           ref={videoRef}
-          src={videoUrl.current}
+          src={videoUrl}
           onLoadedMetadata={handleLoaded}
           onLoadedData={handleLoaded}
           onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
