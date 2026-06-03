@@ -1,46 +1,33 @@
-## What we're building
+## Goal
 
-A mobile-first web app for your coworker. Flow:
+Create a working sign-in account that Google Play reviewers can use to access the restricted area of SoupyTag (the admin dashboard at `/admin`), so the "App access" step in Play Console passes review.
 
-1. He opens it on his phone, taps a big **Capture** button → phone camera opens.
-2. After the photo, he taps **Hold to talk** and says something like *"the Zenly unit on the left, dented"*.
-3. App transcribes his speech, then asks an AI vision model: *"find the Zenly unit in this image"*.
-4. AI returns a bounding box → app draws a highlight rectangle + his label on the photo.
-5. He can add more annotations (repeat step 2), undo, or clear.
-6. **Download / Share** button → saves the annotated photo to his phone, or opens the native share sheet so he can send it through Teams himself.
+## Credentials to create
 
-No Teams login required for now — you said annotation first, Teams later.
+- **Email:** `reviewer@soupytag.company`
+- **Password:** `ReviewPass2024!`
 
-## Screens
+## What I'll do
 
-- **Capture screen** — full-bleed camera button, recent shots strip at bottom.
-- **Annotate screen** — the photo fills the screen, floating mic button, list of annotations he's added (each tappable to remove), Download/Share button in header.
+1. **Create the auth user** in Lovable Cloud (your backend) with the email and password above, and mark the email as already confirmed so the reviewer can sign in immediately without needing to click a confirmation link.
 
-## How the smart part works
+2. **Grant the reviewer the `admin` role** so that after signing in at `/login`, they actually land on the `/admin` dashboard instead of being bounced back to the login page.
+   - Without this step, the login would succeed but the admin check would reject them and redirect them in a loop — Google's reviewer would report "credentials don't work."
+   - The dashboard only shows order records (app name, package name, customer email, status). No payment details, no secrets. Acceptable for a Play review account.
 
-- **Voice → text**: browser's built-in speech recognition (free, works on his phone, no setup).
-- **Text + photo → highlighted region**: Lovable AI (Gemini vision model) — we send it the photo plus his transcribed phrase and ask for the bounding box of what he described. This needs Lovable Cloud turned on so the AI key stays secure.
-- **Drawing the box**: done in the browser on top of the image, then "flattened" into the saved file so the highlight is baked into the downloaded photo.
+3. **Verify** by listing the user and their role in the database after creation, so we know the credentials are live before you paste them into Play Console.
 
-## What he gets
+## What you'll paste into Play Console
 
-A single annotated JPEG saved to his phone's camera roll (or shared straight into Teams via the phone's share sheet). Looks like: original photo + colored rectangle + his label text near the box.
+Under **App access → All or some functionality is restricted → Add new instructions:**
 
-## Honest caveats
+- **Name:** Admin dashboard
+- **Username:** `reviewer@soupytag.company`
+- **Password:** `ReviewPass2024!`
+- **Sign-in URL:** `https://soupytag.company/login`
+- **Any other information:** "Sign in with the credentials above to access the internal orders dashboard. The main app at the home page works fully without an account."
 
-- **Auto-detect accuracy**: vision AI is good but not perfect. If it misses, he can re-record the phrase with more detail (*"the gray box mounted on the wall, top right"*). If accuracy turns out shaky in real use, we add a fallback: tap the spot, then talk.
-- **Browser speech recognition** works great in Chrome on Android, decent on iOS Safari. If he's on a locked-down work phone we may need to swap in a paid transcription service later.
-- **Per-use cost**: each annotation = 1 small AI call. Cheap, but not zero.
+## Notes
 
-## Next step after this ships
-
-When he's happy with the flow, we add a "Post to Teams" button that drops the annotated image directly into a chosen channel (requires connecting his Teams account once).
-
-## Technical notes
-
-- TanStack Start, mobile-first layout, viewport locked to mobile preview.
-- Camera via `<input type="file" capture="environment">` (works on iOS + Android, no permissions dance).
-- Speech via Web Speech API (`webkitSpeechRecognition`).
-- Annotation render: HTML canvas overlay; export via `canvas.toBlob()` → download link / Web Share API.
-- Vision call: `createServerFn` → Lovable AI Gateway, model `google/gemini-3-flash-preview`, prompt asks for normalized `[x,y,w,h]` bbox JSON for the described object. Requires enabling Lovable Cloud for the secret.
-- State kept in component state; no DB until he wants history.
+- This account is permanent until you delete it. If you ever want to revoke Google's access (e.g. after review passes), I can remove the user in one step.
+- The password is fine for a review account but is now visible in chat history — let me know if you'd like a different one.
