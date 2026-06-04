@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'company.soupytag.app',
+  appId: 'com.soupytag.app',
   appName: 'SoupyTag',
   webDir: 'dist',
   server: {
