@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import { AnalyticsProvider } from "@/lib/analytics";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -73,15 +74,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "SoupyTag — Photo Defect Tagging with Voice & AI" },
-      { name: "description", content: "SoupyTag lets you snap a photo of a defect, outline the spot with AI, and describe the problem with your voice. No account required." },
+      {
+        name: "description",
+        content:
+          "SoupyTag lets you snap a photo of a defect, outline the spot with AI, and describe the problem with your voice. No account required.",
+      },
       { name: "author", content: "SoupyTag" },
       { property: "og:title", content: "SoupyTag — Photo Defect Tagging with Voice & AI" },
-      { property: "og:description", content: "Snap a photo, tap the defect, describe it with your voice. SoupyTag turns inspections into shareable tagged images in seconds." },
+      {
+        property: "og:description",
+        content:
+          "Snap a photo, tap the defect, describe it with your voice. SoupyTag turns inspections into shareable tagged images in seconds.",
+      },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "SoupyTag" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "SoupyTag — Photo Defect Tagging with Voice & AI" },
-      { name: "twitter:description", content: "Snap a photo, tap the defect, describe it with your voice. SoupyTag turns inspections into shareable tagged images in seconds." },
+      {
+        name: "twitter:description",
+        content:
+          "Snap a photo, tap the defect, describe it with your voice. SoupyTag turns inspections into shareable tagged images in seconds.",
+      },
       { name: "google-site-verification", content: "GrHJUY2_JwdZpv_x1Qk2LUrpdOvQNMcZardiZcwvxRc" },
     ],
     links: [
@@ -115,10 +128,12 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <main>
-        <Outlet />
-      </main>
-    </QueryClientProvider>
+    <AnalyticsProvider>
+      <QueryClientProvider client={queryClient}>
+        <main>
+          <Outlet />
+        </main>
+      </QueryClientProvider>
+    </AnalyticsProvider>
   );
 }

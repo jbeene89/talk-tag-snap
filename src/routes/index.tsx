@@ -21,12 +21,17 @@ import {
   Video as VideoIcon,
   Clock,
   Globe,
+  Settings,
 } from "lucide-react";
 
+import { OnboardingDialog, hasCompletedOnboarding } from "@/components/OnboardingDialog";
 import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
 import { useAiUsage, FREE_LIMIT } from "@/lib/usage";
 import { PaywallDialog } from "@/components/PaywallDialog";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { VideoFramePicker } from "@/components/VideoFramePicker";
+import { useAnalytics } from "@/lib/analytics";
+import { requestNativeReview, shareImage } from "@/lib/native";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -110,10 +115,15 @@ function AnnotatePage() {
   const identifyBox = useServerFn(identifyInBox);
 
   const usage = useAiUsage();
+  const analytics = useAnalytics();
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [tapMode, setTapMode] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
-  const [drawing, setDrawing] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [drawing, setDrawing] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(
+    null,
+  );
   const drawingRef = useRef<{ active: boolean; start: { x: number; y: number } | null }>({
     active: false,
     start: null,
@@ -148,6 +158,13 @@ function AnnotatePage() {
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!hasCompletedOnboarding()) {
+      setOnboardingOpen(true);
+      analytics.capture("onboarding_started");
+    }
+  }, [analytics]);
+
   // Speech recognition — dictates into the caption draft
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -168,7 +185,11 @@ function AnnotatePage() {
     rec.onend = () => setListening(false);
     rec.onerror = (e: any) => {
       setListening(false);
-      setError(e?.error === "not-allowed" ? "Microphone permission denied." : "Couldn't hear that. Try again.");
+      setError(
+        e?.error === "not-allowed"
+          ? "Microphone permission denied."
+          : "Couldn't hear that. Try again.",
+      );
     };
     recognitionRef.current = rec;
     return () => {
@@ -201,10 +222,7 @@ function AnnotatePage() {
     if (!hydratedRef.current) return;
     try {
       if (imageDataUrl && imageSize) {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ imageDataUrl, imageSize, annotations }),
-        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ imageDataUrl, imageSize, annotations }));
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -216,17 +234,14 @@ function AnnotatePage() {
   // ---- Pinch-zoom on the photo ----
   const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0 });
   const zoomViewportRef = useRef<HTMLDivElement>(null);
-  const pinchRef = useRef<
-    | null
-    | {
-        startDist: number;
-        startScale: number;
-        startX: number;
-        startY: number;
-        focalX: number;
-        focalY: number;
-      }
-  >(null);
+  const pinchRef = useRef<null | {
+    startDist: number;
+    startScale: number;
+    startX: number;
+    startY: number;
+    focalX: number;
+    focalY: number;
+  }>(null);
   // Voice auto-advance: when caption is saved while mic was on, jump to next unlabeled box and re-arm mic
   const wasListeningRef = useRef(false);
   const autoAdvanceRef = useRef(false);
@@ -284,7 +299,7 @@ function AnnotatePage() {
 
   const resetZoom = () => setZoom({ s: 1, x: 0, y: 0 });
 
-  const handleFile = (file: File) => {
+  const handleFile = (file: File, source: "camera" | "library" | "video" = "library") => {
     setError(null);
     setAnnotations([]);
     setPast([]);
@@ -302,6 +317,11 @@ function AnnotatePage() {
       img.onload = () => {
         setImageSize({ w: img.naturalWidth, h: img.naturalHeight });
         setImageDataUrl(url);
+        analytics.capture("photo_loaded", {
+          source,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
       };
       img.src = url;
     };
@@ -382,7 +402,6 @@ function AnnotatePage() {
     [commit],
   );
 
-
   const handleAutoScan = async () => {
     if (!imageDataUrl || processing) return;
     if (!usage.requestAiCall()) return;
@@ -395,13 +414,19 @@ function AnnotatePage() {
       if (result.error) setError(result.error);
       if (!result.items.length) {
         setError((prev) => prev ?? "No objects found. Try tap or box mode.");
+        analytics.capture("ai_tag_failed", { method: "auto", reason: "no_objects" });
       } else {
         usage.recordAiCall();
         setScanPreview(result.items);
+        analytics.capture("ai_tag_completed", {
+          method: "auto",
+          result_count: result.items.length,
+        });
       }
     } catch (e) {
       console.error(e);
       setError("Something went wrong. Try again.");
+      analytics.captureException(e, { flow: "auto_scan" });
     } finally {
       setProcessing(false);
       setBusyText("");
@@ -462,9 +487,14 @@ function AnnotatePage() {
         addAnnotationAndSelect(result.box);
       }
       if (!result.error) usage.recordAiCall();
+      analytics.capture(result.error ? "ai_tag_failed" : "ai_tag_completed", {
+        method: "tap",
+        used_fallback_box: !result.box,
+      });
     } catch (err) {
       console.error(err);
       setError("Something went wrong. Try again.");
+      analytics.captureException(err, { flow: "tap_identify" });
     } finally {
       setProcessing(false);
       setBusyText("");
@@ -527,12 +557,24 @@ function AnnotatePage() {
       const label = result?.label?.trim();
       if (label) {
         setAnnotations((prev) =>
-          prev.map((a) => (a.box === userBox || (a.box.x === userBox.x && a.box.y === userBox.y && a.box.w === userBox.w && a.box.h === userBox.h) ? { ...a, label: a.label || label } : a)),
+          prev.map((a) =>
+            a.box === userBox ||
+            (a.box.x === userBox.x &&
+              a.box.y === userBox.y &&
+              a.box.w === userBox.w &&
+              a.box.h === userBox.h)
+              ? { ...a, label: a.label || label }
+              : a,
+          ),
         );
       }
       if (!result?.error) usage.recordAiCall();
+      analytics.capture(result?.error ? "ai_tag_failed" : "ai_tag_completed", {
+        method: "box",
+      });
     } catch (err) {
       console.error(err);
+      analytics.captureException(err, { flow: "box_identify" });
     }
   };
 
@@ -546,7 +588,6 @@ function AnnotatePage() {
     snapshot: Annotation[] | null;
     moved: boolean;
   }>({ kind: null, id: null, startBox: null, startPos: null, snapshot: null, moved: false });
-
 
   const getContainerPos = (clientX: number, clientY: number) => {
     const rect = imageContainerRef.current?.getBoundingClientRect();
@@ -634,7 +675,6 @@ function AnnotatePage() {
     };
   };
 
-
   // ---- Caption helpers ----
 
   const saveCaption = () => {
@@ -684,7 +724,6 @@ function AnnotatePage() {
     setCaptionDraft("");
   };
 
-
   // Flush the current caption draft into the selected annotation without
   // clearing selection. Used before switching boxes, toggling modes, sharing.
   const flushCaptionDraft = useCallback(() => {
@@ -729,22 +768,21 @@ function AnnotatePage() {
     flushCaptionDraft();
     // Read fresh annotations after flush via functional update
     setAnnotations((curr) => {
-      const lines = curr.map(
-        (a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`,
-      );
-      const header = includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt, useUTC)}\n\n` : "";
+      const lines = curr.map((a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`);
+      const header =
+        includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt, useUTC)}\n\n` : "";
       const text = header + lines.join("\n");
       navigator.clipboard
         ?.writeText(text)
         .then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
+          analytics.capture("annotation_list_copied", { tag_count: curr.length });
         })
         .catch(() => setError("Couldn't copy to clipboard."));
       return curr;
     });
   };
-
 
   const startListening = () => {
     if (!recognitionRef.current || listening || processing) return;
@@ -788,20 +826,29 @@ function AnnotatePage() {
 
   // ---- Export ----
 
+  const recordShareAndMaybeReview = async () => {
+    const countKey = "soupytag:share:count:v1";
+    const reviewKey = "soupytag:review:requested:v1";
+    const next = Number(localStorage.getItem(countKey) ?? "0") + 1;
+    localStorage.setItem(countKey, String(next));
+    if (next >= 3 && localStorage.getItem(reviewKey) !== "1") {
+      localStorage.setItem(reviewKey, "1");
+      const launched = await requestNativeReview();
+      analytics.capture("native_review_requested", { launched, share_count: next });
+    }
+  };
+
   const exportImage = async (share: boolean) => {
     if (!imageDataUrl || !imageSize) return;
     // Auto-save any in-progress caption first
     flushCaptionDraft();
     const exportList = selectedId
-      ? annotations.map((a) =>
-          a.id === selectedId ? { ...a, label: captionDraft.trim() } : a,
-        )
+      ? annotations.map((a) => (a.id === selectedId ? { ...a, label: captionDraft.trim() } : a))
       : annotations;
     if (selectedId) {
       setSelectedId(null);
       setCaptionDraft("");
     }
-
 
     const canvas = document.createElement("canvas");
     canvas.width = imageSize.w;
@@ -833,10 +880,11 @@ function AnnotatePage() {
       const textW = ctx.measureText(label).width + pad * 2;
       const textH = fontSize + pad * 1.2;
       const ty = y - textH < 0 ? y + strokeW : y - textH;
+      const tx = Math.max(0, Math.min(x, imageSize.w - textW));
       ctx.fillStyle = color;
-      ctx.fillRect(x, ty, textW, textH);
+      ctx.fillRect(tx, ty, textW, textH);
       ctx.fillStyle = sev === "major" ? "#ffffff" : "#111827";
-      ctx.fillText(label, x + pad, ty + pad * 0.6);
+      ctx.fillText(label, tx + pad, ty + pad * 0.6);
     });
 
     if (includeTimestamp && capturedAt) {
@@ -859,36 +907,83 @@ function AnnotatePage() {
     canvas.toBlob(
       async (blob) => {
         if (!blob) return;
-        const file = new File([blob], `defect-${Date.now()}.jpg`, { type: "image/jpeg" });
-        if (share && (navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
-          try {
-            await (navigator as any).share({ files: [file], title: "Tagged photo" });
+        const fileName = `defect-${Date.now()}.jpg`;
+        const shareText = exportList
+          .map(
+            (annotation, index) =>
+              `${index + 1}. [${sevOf(annotation).toUpperCase()}] ${annotation.label?.trim() || "(no description)"}`,
+          )
+          .join("\n");
+        if (share) {
+          const shared = await shareImage({
+            blob,
+            fileName,
+            title: "SoupyTag inspection",
+            text: shareText,
+          });
+          if (shared) {
+            analytics.capture("export_completed", {
+              method: "share",
+              tag_count: exportList.length,
+              timestamp_included: includeTimestamp,
+            });
+            await recordShareAndMaybeReview();
             return;
-          } catch {
-            // fall through to download
           }
         }
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = file.name;
+        a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
+        analytics.capture("export_completed", {
+          method: "download",
+          tag_count: exportList.length,
+          timestamp_included: includeTimestamp,
+        });
       },
       "image/jpeg",
       0.92,
     );
   };
 
+  const appOverlays = (
+    <>
+      <OnboardingDialog open={onboardingOpen} onOpenChange={setOnboardingOpen} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onReplayOnboarding={() => {
+          setSettingsOpen(false);
+          analytics.capture("onboarding_replayed");
+          setOnboardingOpen(true);
+        }}
+        onUnlocked={usage.markUnlocked}
+      />
+    </>
+  );
+
   // ---------- Capture screen ----------
   if (!imageDataUrl) {
     return (
       <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
-        <header className="px-5 pt-8 pb-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Tag the problem.</h1>
-          <p className="text-sm text-neutral-400 mt-1">
-            Snap a photo of broken things or construction mistakes. AI outlines the spot — you describe what's wrong.
-          </p>
+        <header className="flex items-start justify-between gap-4 px-5 pb-4 pt-8">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Tag the problem.</h1>
+            <p className="text-sm text-neutral-400 mt-1">
+              Snap a photo of broken things or construction mistakes. AI outlines the spot — you
+              describe what's wrong.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-neutral-800 bg-neutral-900 text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
         </header>
 
         <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
@@ -926,7 +1021,7 @@ function AnnotatePage() {
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) handleFile(f);
+            if (f) handleFile(f, "camera");
             e.target.value = "";
           }}
         />
@@ -937,7 +1032,7 @@ function AnnotatePage() {
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) handleFile(f);
+            if (f) handleFile(f, "library");
             e.target.value = "";
           }}
         />
@@ -964,7 +1059,7 @@ function AnnotatePage() {
             onPickFrame={(frame, atTime) => {
               setShowVideoPicker(false);
               setVideoResumeTime(atTime);
-              handleFile(frame);
+              handleFile(frame, "video");
             }}
           />
         )}
@@ -973,12 +1068,13 @@ function AnnotatePage() {
           onOpenChange={usage.setPaywallOpen}
           onUnlocked={usage.markUnlocked}
         />
+        {appOverlays}
       </div>
     );
   }
 
   // ---------- Annotate screen ----------
-  const selected = selectedId ? annotations.find((a) => a.id === selectedId) ?? null : null;
+  const selected = selectedId ? (annotations.find((a) => a.id === selectedId) ?? null) : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
@@ -1013,11 +1109,16 @@ function AnnotatePage() {
               {usage.remaining}/{FREE_LIMIT} free AI tags
             </button>
           )}
-          {usage.unlocked && (
-            <span className="text-[10px] text-yellow-400">✓ Unlimited</span>
-          )}
+          {usage.unlocked && <span className="text-[10px] text-yellow-400">✓ Unlimited</span>}
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 rounded-lg bg-neutral-800 active:bg-neutral-700"
+            aria-label="Open settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
           <button
             onClick={undo}
             disabled={past.length === 0}
@@ -1039,7 +1140,9 @@ function AnnotatePage() {
           <button
             onClick={() => setIncludeTimestamp((v) => !v)}
             className={`p-2 rounded-lg active:bg-neutral-700 ${
-              includeTimestamp ? "bg-yellow-400 text-neutral-950" : "bg-neutral-800 text-neutral-200"
+              includeTimestamp
+                ? "bg-yellow-400 text-neutral-950"
+                : "bg-neutral-800 text-neutral-200"
             }`}
             aria-label={includeTimestamp ? "Timestamp on" : "Timestamp off"}
             title={
@@ -1091,7 +1194,6 @@ function AnnotatePage() {
             <Share2 className="w-4 h-4" />
           </button>
         </div>
-
       </header>
 
       <div
@@ -1106,105 +1208,125 @@ function AnnotatePage() {
             transition: pinchRef.current ? "none" : "transform 0.15s ease-out",
           }}
         >
-        <div
-          ref={imageContainerRef}
-          onClick={boxMode ? undefined : handleImageTap}
-          onPointerDown={handlePointerDown}
-          onPointerMove={(e) => {
-            handlePointerMove(e);
-            onBoxDragMove(e);
-          }}
-          onPointerUp={(e) => {
-            handlePointerUp();
-            endBoxDrag();
-          }}
-          onPointerCancel={(e) => {
-            handlePointerUp();
-            endBoxDrag();
-          }}
-          className={`relative max-h-full max-w-full ${tapMode || boxMode ? "cursor-crosshair" : ""}`}
-          style={tapMode || boxMode ? { touchAction: "none" } : undefined}
-        >
-          <img
-            src={imageDataUrl}
-            alt="Photo being annotated for defect tagging"
-            className="block max-h-[calc(100vh-300px)] max-w-full object-contain select-none pointer-events-none"
-            draggable={false}
-          />
-          {(tapMode || boxMode) && (
-            <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
-          )}
-          {drawing && (
-            <div
-              className="absolute border-2 border-yellow-400 bg-yellow-400/15 pointer-events-none"
-              style={{
-                left: `${Math.min(drawing.x1, drawing.x2) * 100}%`,
-                top: `${Math.min(drawing.y1, drawing.y2) * 100}%`,
-                width: `${Math.abs(drawing.x2 - drawing.x1) * 100}%`,
-                height: `${Math.abs(drawing.y2 - drawing.y1) * 100}%`,
-              }}
+          <div
+            ref={imageContainerRef}
+            onClick={boxMode ? undefined : handleImageTap}
+            onPointerDown={handlePointerDown}
+            onPointerMove={(e) => {
+              handlePointerMove(e);
+              onBoxDragMove(e);
+            }}
+            onPointerUp={(e) => {
+              handlePointerUp();
+              endBoxDrag();
+            }}
+            onPointerCancel={(e) => {
+              handlePointerUp();
+              endBoxDrag();
+            }}
+            className={`relative max-h-full max-w-full ${tapMode || boxMode ? "cursor-crosshair" : ""}`}
+            style={tapMode || boxMode ? { touchAction: "none" } : undefined}
+          >
+            <img
+              src={imageDataUrl}
+              alt="Photo being annotated for defect tagging"
+              className="block max-h-[calc(100vh-300px)] max-w-full object-contain select-none pointer-events-none"
+              draggable={false}
             />
-          )}
+            {(tapMode || boxMode) && (
+              <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
+            )}
+            {drawing && (
+              <div
+                className="absolute border-2 border-yellow-400 bg-yellow-400/15 pointer-events-none"
+                style={{
+                  left: `${Math.min(drawing.x1, drawing.x2) * 100}%`,
+                  top: `${Math.min(drawing.y1, drawing.y2) * 100}%`,
+                  width: `${Math.abs(drawing.x2 - drawing.x1) * 100}%`,
+                  height: `${Math.abs(drawing.y2 - drawing.y1) * 100}%`,
+                }}
+              />
+            )}
 
-          {/* Annotation boxes */}
-          <div className="absolute inset-0">
-            {annotations.map((a, i) => {
-              const isSelected = a.id === selectedId;
-              const sev = sevOf(a);
-              return (
-                <div
-                  key={a.id}
-                  className={`absolute ${SEV_BORDER[sev]} ${isSelected ? "border-2 bg-white/5" : "border-[3px]"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
-                  style={{
-                    left: `${a.box.x * 100}%`,
-                    top: `${a.box.y * 100}%`,
-                    width: `${a.box.w * 100}%`,
-                    height: `${a.box.h * 100}%`,
-                    touchAction: "none",
-                  }}
-                  onPointerDown={(e) => {
-                    if (isSelected) {
-                      startBoxDrag(e, a.id, "move", a.box);
-                    } else {
-                      e.stopPropagation();
-                      selectExisting(a.id);
-                    }
-                  }}
-                >
-                  <span className="absolute -top-6 left-0 flex items-center gap-1 pointer-events-none">
-                    <span className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow`}>
-                      {i + 1}
-                    </span>
-                    {a.label && (
-                      <span className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate`}>
-                        {a.label}
+            {/* Annotation boxes */}
+            <div className="absolute inset-0">
+              {annotations.map((a, i) => {
+                const isSelected = a.id === selectedId;
+                const sev = sevOf(a);
+                return (
+                  <div
+                    key={a.id}
+                    role="button"
+                    tabIndex={tapMode || boxMode ? -1 : 0}
+                    aria-label={`Tag ${i + 1}: ${a.label || "No description"}. Severity ${sev}.`}
+                    className={`absolute ${SEV_BORDER[sev]} ${isSelected ? "border-2 bg-white/5" : "border-[3px]"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
+                    style={{
+                      left: `${a.box.x * 100}%`,
+                      top: `${a.box.y * 100}%`,
+                      width: `${a.box.w * 100}%`,
+                      height: `${a.box.h * 100}%`,
+                      touchAction: "none",
+                    }}
+                    onPointerDown={(e) => {
+                      if (isSelected) {
+                        startBoxDrag(e, a.id, "move", a.box);
+                      } else {
+                        e.stopPropagation();
+                        selectExisting(a.id);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectExisting(a.id);
+                      }
+                    }}
+                  >
+                    <span
+                      className="absolute -top-6 flex items-center gap-1 pointer-events-none"
+                      style={
+                        a.box.x + a.box.w / 2 > 0.55
+                          ? { right: 0, flexDirection: "row-reverse" }
+                          : { left: 0 }
+                      }
+                    >
+                      <span
+                        className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow`}
+                      >
+                        {i + 1}
                       </span>
+                      {a.label && (
+                        <span
+                          className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate`}
+                        >
+                          {a.label}
+                        </span>
+                      )}
+                    </span>
+                    {isSelected && !tapMode && !boxMode && (
+                      <>
+                        {(["nw", "ne", "sw", "se"] as const).map((corner) => (
+                          <div
+                            key={corner}
+                            onPointerDown={(e) => startBoxDrag(e, a.id, corner, a.box)}
+                            className="absolute w-6 h-6 bg-yellow-300 border-2 border-neutral-950 rounded-full"
+                            style={{
+                              left: corner.includes("w") ? "-12px" : "auto",
+                              right: corner.includes("e") ? "-12px" : "auto",
+                              top: corner.includes("n") ? "-12px" : "auto",
+                              bottom: corner.includes("s") ? "-12px" : "auto",
+                              touchAction: "none",
+                              cursor: `${corner}-resize`,
+                            }}
+                          />
+                        ))}
+                      </>
                     )}
-                  </span>
-                  {isSelected && !tapMode && !boxMode && (
-                    <>
-                      {(["nw", "ne", "sw", "se"] as const).map((corner) => (
-                        <div
-                          key={corner}
-                          onPointerDown={(e) => startBoxDrag(e, a.id, corner, a.box)}
-                          className="absolute w-6 h-6 bg-yellow-300 border-2 border-neutral-950 rounded-full"
-                          style={{
-                            left: corner.includes("w") ? "-12px" : "auto",
-                            right: corner.includes("e") ? "-12px" : "auto",
-                            top: corner.includes("n") ? "-12px" : "auto",
-                            bottom: corner.includes("s") ? "-12px" : "auto",
-                            touchAction: "none",
-                            cursor: `${corner}-resize`,
-                          }}
-                        />
-                      ))}
-                    </>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
         </div>
         {zoom.s > 1 && (
           <button
@@ -1217,7 +1339,7 @@ function AnnotatePage() {
       </div>
 
       {/* Status line */}
-      <div className="px-4 pt-2 min-h-[1.75rem] text-center text-sm">
+      <div className="px-4 pt-2 min-h-[1.75rem] text-center text-sm" aria-live="polite">
         {processing && (
           <span className="inline-flex items-center gap-2 text-neutral-300">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1233,7 +1355,11 @@ function AnnotatePage() {
         {!processing && !tapMode && !boxMode && !selected && annotations.length > 0 && !error && (
           <span className="text-neutral-500">Tap any box to edit its description</span>
         )}
-        {error && <div className="text-red-400 mt-1">{error}</div>}
+        {error && (
+          <div role="alert" className="text-red-400 mt-1">
+            {error}
+          </div>
+        )}
       </div>
 
       {/* Caption sheet (visible when a box is selected) */}
@@ -1259,6 +1385,8 @@ function AnnotatePage() {
                 <button
                   key={sev}
                   onClick={() => setSeverity(sev)}
+                  aria-pressed={active}
+                  aria-label={`Set severity to ${label}`}
                   className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
                     active
                       ? `${SEV_BG[sev]} ${SEV_TEXT[sev]} border-transparent`
@@ -1279,6 +1407,7 @@ function AnnotatePage() {
                 if (e.key === "Enter") saveCaption();
               }}
               placeholder="e.g. weld cracked at base"
+              aria-label="Tag description"
               className="flex-1 bg-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder:text-neutral-500"
             />
             {speechSupported && (
@@ -1377,6 +1506,7 @@ function AnnotatePage() {
         onOpenChange={usage.setPaywallOpen}
         onUnlocked={usage.markUnlocked}
       />
+      {appOverlays}
     </div>
   );
 }
@@ -1398,6 +1528,7 @@ function ModeButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={active}
       className="flex flex-col items-center gap-1 text-xs disabled:opacity-40"
     >
       <span

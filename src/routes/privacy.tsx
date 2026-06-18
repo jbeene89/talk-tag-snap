@@ -3,10 +3,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy — SoupyTag" },
-      { name: "description", content: "Review the SoupyTag Privacy Policy to understand how we protect your photos, voice annotations, and AI tagging data." },
-      { property: "og:title", content: "Privacy Policy — SoupyTag" },
-      { property: "og:description", content: "How SoupyTag handles your photos, voice notes, and AI tagging data — what stays on your device and what doesn't." },
+      { title: "Privacy Policy - SoupyTag" },
+      {
+        name: "description",
+        content:
+          "How SoupyTag handles photos, voice input, purchases, feedback, and optional analytics.",
+      },
     ],
   }),
   component: PrivacyPage,
@@ -14,70 +16,92 @@ export const Route = createFileRoute("/privacy")({
 
 function PrivacyPage() {
   return (
-    <div className="mx-auto max-w-2xl px-6 py-12 text-foreground">
-      <Link to="/" className="text-sm text-muted-foreground hover:underline">
-        ← Back to app
-      </Link>
-      <h1 className="mt-4 text-3xl font-bold">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Last updated: June 1, 2026
-      </p>
-
-      <section className="mt-8 space-y-4 text-sm leading-relaxed">
-        <p>
-          SoupyTag ("the app") is designed to respect your privacy. This page
-          explains what the app does and does not collect.
+    <div className="min-h-screen bg-neutral-950 text-neutral-100">
+      <main className="mx-auto max-w-2xl px-6 py-12">
+        <Link to="/" className="text-sm font-bold text-yellow-400 hover:underline">
+          Back to SoupyTag
+        </Link>
+        <p className="mt-8 font-mono text-[10px] font-black tracking-[0.22em] text-yellow-400">
+          PRIVACY / PLAIN LANGUAGE
         </p>
+        <h1 className="mt-3 text-4xl font-black tracking-[-0.04em]">Privacy Policy</h1>
+        <p className="mt-2 text-sm text-neutral-500">Last updated: June 18, 2026</p>
 
-        <h2 className="mt-6 text-lg font-semibold">What we collect</h2>
-        <p>
-          <strong>Nothing personal.</strong> SoupyTag does not require an
-          account and does not collect names, emails, contacts, or location.
-        </p>
+        <section className="mt-10 space-y-7 text-sm leading-7 text-neutral-300">
+          <PolicySection title="The short version">
+            SoupyTag does not require a personal account. Photos and annotation text remain on your
+            device except when you intentionally use an AI feature or share an exported image.
+            Optional analytics stays off until you turn it on.
+          </PolicySection>
 
-        <h2 className="mt-6 text-lg font-semibold">Photos and tags</h2>
-        <p>
-          Photos you capture or upload, and the tags you add to them, are
-          stored <strong>locally on your device</strong>. They are not
-          uploaded to our servers and are not shared with third parties.
-        </p>
+          <PolicySection title="Photos and AI tagging">
+            When you use Auto-find, Tap, or Box identification, the selected image and the minimum
+            instruction needed for that request are encrypted in transit and sent through our server
+            to Google Gemini for processing. SoupyTag does not intentionally retain those images
+            after the result is returned. Manual annotation and export do not require AI.
+          </PolicySection>
 
-        <h2 className="mt-6 text-lg font-semibold">Camera and microphone</h2>
-        <p>
-          The app may request access to your camera (to take photos) and
-          microphone (to record voice tags). These are only used when you
-          actively choose to use those features. Recordings stay on your
-          device.
-        </p>
+          <PolicySection title="Camera, files, and microphone">
+            Camera and file access are used only when you choose a photo or video. Voice dictation
+            is handled by the speech service available on your device; SoupyTag does not save an
+            audio recording. Your working image, labels, and free-tag counter are stored locally so
+            an interrupted session can be recovered.
+          </PolicySection>
 
-        <h2 className="mt-6 text-lg font-semibold">AI tagging</h2>
-        <p>
-          When you use the AI tagging feature, the image and your prompt are
-          sent to our AI provider solely to generate the tag and are not
-          stored by us beyond what's needed to return a result.
-        </p>
+          <PolicySection title="Optional product analytics">
+            Analytics is disabled by default. If you opt in, SoupyTag sends anonymous action events
+            to PostHog, such as whether onboarding finished, which tagging method was used, and
+            whether an export succeeded. We disable session replay and automatic interaction
+            capture. Photos, labels, prompts, voice content, email addresses, and feedback messages
+            are never included. You can turn analytics off in Settings at any time.
+          </PolicySection>
 
-        <h2 className="mt-6 text-lg font-semibold">Children</h2>
-        <p>
-          The app is not directed at children under 13 and does not knowingly
-          collect data from them.
-        </p>
+          <PolicySection title="Feedback">
+            The feedback form collects a category and message. A reply email is optional. App
+            version and device details are attached only when you enable that option. Feedback is
+            used for support and product improvement and is scheduled for deletion after 90 days.
+          </PolicySection>
 
-        <h2 className="mt-6 text-lg font-semibold">Changes</h2>
-        <p>
-          If this policy changes, we'll update the date at the top of this
-          page.
-        </p>
+          <PolicySection title="Purchases">
+            Google Play and RevenueCat process the one-time unlimited unlock. SoupyTag receives the
+            entitlement status needed to unlock the feature, but does not receive your full payment
+            card details.
+          </PolicySection>
 
-        <h2 className="mt-6 text-lg font-semibold">Contact</h2>
-        <p>
-          Questions? Reach out at{" "}
-          <a href="mailto:hello@soupytag.company" className="underline">
-            hello@soupytag.company
-          </a>
-          .
-        </p>
-      </section>
+          <PolicySection title="Sharing">
+            Exported images are shared only when you choose a destination in the Android share
+            sheet. The selected destination's privacy policy applies after you share.
+          </PolicySection>
+
+          <PolicySection title="Your choices">
+            You can clear locally stored SoupyTag data through Android settings, disable analytics
+            inside the app, omit contact details from feedback, or request deletion of submitted
+            feedback by emailing us.
+          </PolicySection>
+
+          <PolicySection title="Children and changes">
+            SoupyTag is not directed to children under 13. Material policy changes will be reflected
+            here with a new effective date.
+          </PolicySection>
+
+          <PolicySection title="Contact">
+            Questions or deletion requests can be sent to{" "}
+            <a href="mailto:hello@soupytag.company" className="font-bold text-yellow-400 underline">
+              hello@soupytag.company
+            </a>
+            .
+          </PolicySection>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function PolicySection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-l-2 border-neutral-800 pl-5">
+      <h2 className="text-lg font-black text-neutral-100">{title}</h2>
+      <p className="mt-2">{children}</p>
     </div>
   );
 }

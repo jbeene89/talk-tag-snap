@@ -9,13 +9,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useAnalytics } from "@/lib/analytics";
 import { FREE_LIMIT } from "@/lib/usage";
-import {
-  isNative,
-  purchaseUnlock,
-  restorePurchases,
-  devUnlockLocal,
-} from "@/lib/billing";
+import { isNative, purchaseUnlock, restorePurchases, devUnlockLocal } from "@/lib/billing";
 
 type Props = {
   open: boolean;
@@ -27,20 +23,25 @@ export function PaywallDialog({ open, onOpenChange, onUnlocked }: Props) {
   const [busy, setBusy] = useState<null | "buy" | "restore">(null);
   const [error, setError] = useState<string | null>(null);
   const native = isNative();
+  const analytics = useAnalytics();
 
   const handleBuy = async () => {
     setError(null);
     setBusy("buy");
+    analytics.capture("purchase_started", { product: "unlock_unlimited", price_usd: 2.99 });
     try {
       const result = await purchaseUnlock();
       if (result.ok) {
         onUnlocked();
+        analytics.capture("purchase_completed", { product: "unlock_unlimited" });
       } else if (result.reason === "cancelled") {
         // user backed out — say nothing
       } else if (result.reason === "unavailable") {
         setError("Purchases only work in the Android app from the Play Store.");
+        analytics.capture("purchase_failed", { reason: "unavailable" });
       } else {
         setError(result.message ?? "Purchase failed. Please try again.");
+        analytics.capture("purchase_failed", { reason: "error" });
       }
     } finally {
       setBusy(null);
@@ -54,10 +55,13 @@ export function PaywallDialog({ open, onOpenChange, onUnlocked }: Props) {
       const result = await restorePurchases();
       if (result.ok) {
         onUnlocked();
+        analytics.capture("purchase_restored");
       } else if (result.reason === "unavailable") {
         setError("Restore only works in the Android app from the Play Store.");
+        analytics.capture("purchase_restore_failed", { reason: "unavailable" });
       } else {
         setError(result.message ?? "No previous purchase found on this Google account.");
+        analytics.capture("purchase_restore_failed", { reason: "not_found" });
       }
     } finally {
       setBusy(null);
@@ -137,8 +141,8 @@ export function PaywallDialog({ open, onOpenChange, onUnlocked }: Props) {
           {!native && (
             <div className="rounded-lg bg-neutral-800/60 border border-neutral-700 p-3 text-xs text-neutral-400 space-y-2">
               <p>
-                You're previewing in a browser, so Google Play isn't available. To test the rest
-                of the app:
+                You're previewing in a browser, so Google Play isn't available. To test the rest of
+                the app:
               </p>
               <Button
                 onClick={handleDevUnlock}

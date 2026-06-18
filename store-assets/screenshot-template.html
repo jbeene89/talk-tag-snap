@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; }
+      body {
+        position: relative;
+        background: #0a0a0a;
+        color: #fff;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 80% 15%, rgba(250, 204, 21, .18), transparent 32%),
+          linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+        background-size: auto, 42px 42px, 42px 42px;
+      }
+      .header {
+        position: relative;
+        z-index: 1;
+        padding: 72px 78px 42px;
+      }
+      .stage {
+        color: #facc15;
+        font-family: Consolas, monospace;
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: 5px;
+      }
+      h1 {
+        max-width: 900px;
+        margin: 22px 0 14px;
+        font-size: 78px;
+        line-height: .95;
+        letter-spacing: -4px;
+      }
+      p {
+        margin: 0;
+        color: #c9c9c9;
+        font-size: 30px;
+        line-height: 1.3;
+        font-weight: 600;
+      }
+      .phone {
+        position: absolute;
+        z-index: 1;
+        left: 155px;
+        top: 345px;
+        width: 770px;
+        height: 1545px;
+        overflow: hidden;
+        border: 12px solid #242424;
+        border-radius: 62px;
+        background: #fff;
+        box-shadow: 0 36px 110px rgba(0,0,0,.7), 0 0 0 2px rgba(250,204,21,.25);
+      }
+      .phone::before {
+        content: "";
+        position: absolute;
+        z-index: 2;
+        left: 50%;
+        top: 12px;
+        width: 124px;
+        height: 28px;
+        transform: translateX(-50%);
+        border-radius: 20px;
+        background: #111;
+      }
+      .phone img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+      .brand {
+        position: absolute;
+        z-index: 2;
+        right: 66px;
+        bottom: 48px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+        font-weight: 900;
+      }
+      .mark {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: #3ddc84;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="stage" id="stage"></div>
+      <h1 id="title"></h1>
+      <p id="subtitle"></p>
+    </header>
+    <div class="phone"><img id="screen" alt="SoupyTag app screen" /></div>
+    <div class="brand"><span class="mark">S</span> SOUPYTAG</div>
+    <script>
+      const shots = [
+        ["01 / CAPTURE", "START CLEAR.", "Capture a photo, image, or exact video frame.", "ui-onboarding-capture.png"],
+        ["02 / LOCATE", "FIND IT FAST.", "Use AI, tap a spot, or draw the box yourself.", "ui-onboarding-locate.png"],
+        ["03 / OPEN", "USE ANY PHOTO.", "Turn a real-world issue into a focused visual report.", "ui-annotate-empty.png"],
+        ["04 / EXPLAIN", "MARK THE PROBLEM.", "Add a clear note and choose its severity.", "ui-annotated.png"],
+        ["05 / SEND", "SHARE THE PROOF.", "Export a clean, share-ready annotated image.", "ui-onboarding-share.png"],
+        ["06 / CONTROL", "YOUR SETTINGS.", "Restore, rate, send feedback, and choose analytics.", "ui-settings.png"],
+      ];
+      const index = Math.max(0, Math.min(5, Number(new URLSearchParams(location.search).get("shot") || 1) - 1));
+      const [stage, title, subtitle, screen] = shots[index];
+      document.getElementById("stage").textContent = stage;
+      document.getElementById("title").textContent = title;
+      document.getElementById("subtitle").textContent = subtitle;
+      document.getElementById("screen").src = screen;
+    </script>
+  </body>
+</html>

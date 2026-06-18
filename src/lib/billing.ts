@@ -8,8 +8,7 @@
 // so we expose a "dev unlock" so the gating UI is still testable. The real
 // purchase only runs in the published Android app.
 
-// Note: @capacitor/core is imported dynamically inside isNative() so this
-// module is safe to evaluate during SSR (where `window` doesn't exist).
+import { Capacitor } from "@capacitor/core";
 
 // RevenueCat entitlement identifier — must match what you create in the
 // RevenueCat dashboard (Entitlements → "unlimited").
@@ -19,7 +18,7 @@ const ENTITLEMENT_ID = "unlimited";
 // This is a PUBLISHABLE client key — safe to ship in the app binary.
 // Set in your local .env file before building the Android app.
 const REVENUECAT_ANDROID_API_KEY =
-  (import.meta as any).env?.VITE_REVENUECAT_ANDROID_API_KEY ?? "";
+  (import.meta.env.VITE_REVENUECAT_ANDROID_API_KEY as string | undefined) ?? "";
 
 const LOCAL_UNLOCK_KEY = "soupytag:ai:unlocked:v1";
 
@@ -32,13 +31,18 @@ let initializing: Promise<void> | null = null;
 
 export function isNative(): boolean {
   if (typeof window === "undefined") return false;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Capacitor } = require("@capacitor/core");
-    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
-  } catch {
-    return false;
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
+
+function errorDetails(error: unknown): { code?: string; message: string } {
+  if (error && typeof error === "object") {
+    const value = error as { code?: unknown; message?: unknown };
+    return {
+      code: typeof value.code === "string" ? value.code : undefined,
+      message: typeof value.message === "string" ? value.message : "Purchase failed.",
+    };
   }
+  return { message: "Purchase failed." };
 }
 
 function readLocalUnlock(): boolean {
@@ -65,9 +69,7 @@ async function initRevenueCat(): Promise<void> {
       return;
     }
     if (!REVENUECAT_ANDROID_API_KEY) {
-      console.warn(
-        "[billing] VITE_REVENUECAT_ANDROID_API_KEY is not set. Purchases will fail.",
-      );
+      console.warn("[billing] VITE_REVENUECAT_ANDROID_API_KEY is not set. Purchases will fail.");
       initialized = true;
       return;
     }
@@ -132,13 +134,16 @@ export async function purchaseUnlock(): Promise<PurchaseResult> {
     const { customerInfo } = await Purchases.purchasePackage({ aPackage: pkg });
     const unlocked = Boolean(customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
     if (unlocked) writeLocalUnlock(true);
-    return unlocked ? { ok: true } : { ok: false, reason: "error", message: "Purchase didn't grant entitlement." };
-  } catch (err: any) {
-    if (err?.code === "1" || /cancel/i.test(err?.message ?? "")) {
+    return unlocked
+      ? { ok: true }
+      : { ok: false, reason: "error", message: "Purchase didn't grant entitlement." };
+  } catch (err: unknown) {
+    const details = errorDetails(err);
+    if (details.code === "1" || /cancel/i.test(details.message)) {
       return { ok: false, reason: "cancelled" };
     }
     console.error("[billing] purchase failed", err);
-    return { ok: false, reason: "error", message: err?.message ?? "Purchase failed." };
+    return { ok: false, reason: "error", message: details.message };
   }
 }
 
@@ -151,10 +156,12 @@ export async function restorePurchases(): Promise<PurchaseResult> {
     const { customerInfo } = await Purchases.restorePurchases();
     const unlocked = Boolean(customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
     if (unlocked) writeLocalUnlock(true);
-    return unlocked ? { ok: true } : { ok: false, reason: "error", message: "No previous purchase found." };
-  } catch (err: any) {
+    return unlocked
+      ? { ok: true }
+      : { ok: false, reason: "error", message: "No previous purchase found." };
+  } catch (err: unknown) {
     console.error("[billing] restore failed", err);
-    return { ok: false, reason: "error", message: err?.message ?? "Restore failed." };
+    return { ok: false, reason: "error", message: errorDetails(err).message };
   }
 }
 

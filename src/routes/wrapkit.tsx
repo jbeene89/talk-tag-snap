@@ -41,7 +41,7 @@ function WrapkitPage() {
 
   const createCheckout = useServerFn(createOrderCheckout);
 
-  const validate = (): string | null => {
+  const validate = useCallback((): string | null => {
     try {
       new URL(siteUrl);
     } catch {
@@ -55,7 +55,7 @@ function WrapkitPage() {
     if (iconFile.size > 2 * 1024 * 1024) return "Icon must be under 2 MB.";
     if (!isPaymentsConfigured()) return "Payments are not configured yet. Try again shortly.";
     return null;
-  };
+  }, [appName, email, iconFile, packageName, siteUrl]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -108,7 +108,7 @@ function WrapkitPage() {
         setSubmitting(false);
       }
     },
-    [appName, createCheckout, email, iconFile, packageName, siteUrl]
+    [appName, createCheckout, email, iconFile, packageName, siteUrl, validate]
   );
 
   const checkoutOptions = useMemo(
