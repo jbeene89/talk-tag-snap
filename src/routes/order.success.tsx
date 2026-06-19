@@ -5,6 +5,22 @@ export const Route = createFileRoute("/order/success")({
     order_id: typeof search.order_id === "string" ? search.order_id : undefined,
     session_id: typeof search.session_id === "string" ? search.session_id : undefined,
   }),
+  head: () => ({
+    meta: [
+      { title: "Order Confirmed — WrapKit Cloud by SoupyTag" },
+      {
+        name: "description",
+        content:
+          "Your WrapKit Cloud order is confirmed. We'll email your signed Android app (.aab) within 48 hours.",
+      },
+      { property: "og:title", content: "Order Confirmed — WrapKit Cloud" },
+      {
+        property: "og:description",
+        content: "Your WrapKit Cloud order is confirmed. Android app delivery within 48 hours.",
+      },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: OrderSuccess,
 });
 
