@@ -103,6 +103,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
     ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              name: "SoupyTag",
+              url: "https://soupytag.company",
+            },
+            {
+              "@type": "WebSite",
+              name: "SoupyTag",
+              url: "https://soupytag.company",
+            },
+          ],
+        }),
+      },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
