@@ -8,7 +8,16 @@ import { checkIsAdmin, listOrders, updateOrder } from "@/lib/orders.functions";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
-  head: () => ({ meta: [{ title: "Admin — WrapKit Cloud" }] }),
+  head: () => ({
+    meta: [
+      { title: "Admin — WrapKit Cloud by SoupyTag" },
+      {
+        name: "description",
+        content: "Internal admin dashboard for SoupyTag and WrapKit Cloud orders.",
+      },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
 });
 
 const STATUS_OPTIONS = [
