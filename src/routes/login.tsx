@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { claimAdminIfFirstUser } from "@/lib/orders.functions";
 
 export const Route = createFileRoute("/login")({
