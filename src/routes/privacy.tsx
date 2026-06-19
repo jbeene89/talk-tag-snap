@@ -3,13 +3,21 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy - SoupyTag" },
+      { title: "Privacy Policy — SoupyTag" },
       {
         name: "description",
         content:
           "How SoupyTag handles photos, voice input, purchases, feedback, and optional analytics.",
       },
+      { property: "og:title", content: "Privacy Policy — SoupyTag" },
+      {
+        property: "og:description",
+        content:
+          "How SoupyTag handles photos, voice input, purchases, feedback, and optional analytics.",
+      },
+      { property: "og:url", content: "https://soupytag.company/privacy" },
     ],
+    links: [{ rel: "canonical", href: "https://soupytag.company/privacy" }],
   }),
   component: PrivacyPage,
 });
