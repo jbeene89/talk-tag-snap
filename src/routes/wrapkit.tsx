@@ -18,10 +18,33 @@ export const Route = createFileRoute("/wrapkit")({
         content:
           "We wrap your website into a signed Android app (.aab) ready to upload to the Google Play Store. Flat $99. Delivered within 48 hours.",
       },
-      { property: "og:title", content: "WrapKit Cloud" },
+      { property: "og:title", content: "WrapKit Cloud — Your website as an Android app" },
       {
         property: "og:description",
         content: "Your website, as an Android app. $99 flat. Delivered in 48 hours.",
+      },
+      { property: "og:url", content: "https://soupytag.company/wrapkit" },
+      { property: "og:type", content: "product" },
+    ],
+    links: [{ rel: "canonical", href: "https://soupytag.company/wrapkit" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: "WrapKit Cloud",
+          description:
+            "We wrap your website into a signed Android app (.aab) ready to upload to the Google Play Store. Delivered within 48 hours.",
+          brand: { "@type": "Brand", name: "SoupyTag" },
+          offers: {
+            "@type": "Offer",
+            price: "99",
+            priceCurrency: "USD",
+            availability: "https://schema.org/InStock",
+            url: "https://soupytag.company/wrapkit",
+          },
+        }),
       },
     ],
   }),
