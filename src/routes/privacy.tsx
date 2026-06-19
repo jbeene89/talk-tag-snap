@@ -30,22 +30,21 @@ function PrivacyPage() {
         <section className="mt-10 space-y-7 text-sm leading-7 text-neutral-300">
           <PolicySection title="The short version">
             SoupyTag does not require a personal account. Photos and annotation text remain on your
-            device except when you intentionally use an AI feature or share an exported image.
-            Optional analytics stays off until you turn it on.
+            device unless you share an exported image. Optional analytics stays off until you turn
+            it on.
           </PolicySection>
 
           <PolicySection title="Photos and AI tagging">
-            When you use Auto-find, Tap, or Box identification, the selected image and the minimum
-            instruction needed for that request are encrypted in transit and sent through our server
-            to Google Gemini for processing. SoupyTag does not intentionally retain those images
-            after the result is returned. Manual annotation and export do not require AI.
+            In version 1.2.1, Tap and Box are manual tools that run on your device, and AI auto-find
+            is not enabled. If an optional AI feature is offered later, SoupyTag will explain the
+            processing before you choose to use it. Manual annotation and export do not require AI.
           </PolicySection>
 
           <PolicySection title="Camera, files, and microphone">
             Camera and file access are used only when you choose a photo or video. Voice dictation
             is handled by the speech service available on your device; SoupyTag does not save an
-            audio recording. Your working image, labels, and free-tag counter are stored locally so
-            an interrupted session can be recovered.
+            audio recording. Your working image, labels, and settings are stored locally so an
+            interrupted session can be recovered.
           </PolicySection>
 
           <PolicySection title="Optional product analytics">

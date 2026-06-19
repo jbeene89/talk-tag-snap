@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -7,7 +6,6 @@ import {
   Download,
   Share2,
   RotateCcw,
-  Loader2,
   Sparkles,
   Hand,
   Square,
@@ -24,14 +22,15 @@ import {
   Settings,
 } from "lucide-react";
 
-import { OnboardingDialog, hasCompletedOnboarding } from "@/components/OnboardingDialog";
-import { scanObjects, identifyAtPoint, identifyInBox } from "@/lib/detect.functions";
-import { useAiUsage, FREE_LIMIT } from "@/lib/usage";
-import { PaywallDialog } from "@/components/PaywallDialog";
+import { OnboardingDialog } from "@/components/OnboardingDialog";
+import { createTapFallbackBox } from "@/lib/detection-guards";
+import { useAiUsage } from "@/lib/usage";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { VideoFramePicker } from "@/components/VideoFramePicker";
 import { useAnalytics } from "@/lib/analytics";
-import { requestNativeReview, shareImage } from "@/lib/native";
+import { requestNativeReview, saveImage, shareImage } from "@/lib/native";
+import { hasCompletedCurrentOnboarding } from "@/lib/onboarding";
+import { getSessionPersistenceAction } from "@/lib/session-persistence";
 
 export const Route = createFileRoute("/")({
   component: AnnotatePage,
@@ -41,13 +40,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Snap a photo of broken things or construction mistakes. AI outlines the spot, you describe the problem.",
+          "Snap a photo, tap or box the problem, describe it, and share a clear marked-up image.",
       },
       { property: "og:title", content: "Tag Defects — Tap, Outline, Describe" },
       {
         property: "og:description",
         content:
-          "Snap a photo, AI outlines the defect, you describe what's wrong with your voice. Share a tagged image in seconds.",
+          "Snap a photo, mark the problem, describe what's wrong, and share a tagged image in seconds.",
       },
     ],
   }),
@@ -110,10 +109,6 @@ function formatStamp(d: Date, useUTC: boolean): string {
 }
 
 function AnnotatePage() {
-  const scan = useServerFn(scanObjects);
-  const identify = useServerFn(identifyAtPoint);
-  const identifyBox = useServerFn(identifyInBox);
-
   const usage = useAiUsage();
   const analytics = useAnalytics();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -138,12 +133,9 @@ function AnnotatePage() {
   const [captionDraft, setCaptionDraft] = useState("");
 
   const [listening, setListening] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [busyText, setBusyText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(true);
-
-  const [scanPreview, setScanPreview] = useState<{ label: string; box: Box }[] | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +151,7 @@ function AnnotatePage() {
   const captionInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!hasCompletedOnboarding()) {
+    if (!hasCompletedCurrentOnboarding(window.localStorage)) {
       setOnboardingOpen(true);
       analytics.capture("onboarding_started");
     }
@@ -201,7 +193,7 @@ function AnnotatePage() {
 
   // ---- Persist to localStorage so a tab crash doesn't lose the inspection ----
   const STORAGE_KEY = "soupytag:session:v1";
-  const hydratedRef = useRef(false);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -215,19 +207,20 @@ function AnnotatePage() {
         }
       }
     } catch {}
-    hydratedRef.current = true;
+    setSessionHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!hydratedRef.current) return;
+    const action = getSessionPersistenceAction(sessionHydrated, imageDataUrl, imageSize);
+    if (action === "skip") return;
     try {
-      if (imageDataUrl && imageSize) {
+      if (action === "save" && imageDataUrl && imageSize) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ imageDataUrl, imageSize, annotations }));
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
     } catch {}
-  }, [imageDataUrl, imageSize, annotations]);
+  }, [sessionHydrated, imageDataUrl, imageSize, annotations]);
 
   const [copied, setCopied] = useState(false);
 
@@ -301,12 +294,12 @@ function AnnotatePage() {
 
   const handleFile = (file: File, source: "camera" | "library" | "video" = "library") => {
     setError(null);
+    setNotice(null);
     setAnnotations([]);
     setPast([]);
     setFuture([]);
     setSelectedId(null);
     setCaptionDraft("");
-    setScanPreview(null);
     setZoom({ s: 1, x: 0, y: 0 });
     setCapturedAt(new Date());
 
@@ -402,103 +395,16 @@ function AnnotatePage() {
     [commit],
   );
 
-  const handleAutoScan = async () => {
-    if (!imageDataUrl || processing) return;
-    if (!usage.requestAiCall()) return;
-    setProcessing(true);
-    setBusyText("Scanning photo…");
-    setError(null);
-    try {
-      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
-      const result = await scan({ data: { imageBase64: imageDataUrl, mimeType: mime } });
-      if (result.error) setError(result.error);
-      if (!result.items.length) {
-        setError((prev) => prev ?? "No objects found. Try tap or box mode.");
-        analytics.capture("ai_tag_failed", { method: "auto", reason: "no_objects" });
-      } else {
-        usage.recordAiCall();
-        setScanPreview(result.items);
-        analytics.capture("ai_tag_completed", {
-          method: "auto",
-          result_count: result.items.length,
-        });
-      }
-    } catch (e) {
-      console.error(e);
-      setError("Something went wrong. Try again.");
-      analytics.captureException(e, { flow: "auto_scan" });
-    } finally {
-      setProcessing(false);
-      setBusyText("");
-    }
-  };
-
-  const addScanItem = (item: { label: string; box: Box }) => {
-    addAnnotationAndSelect(item.box);
-    setCaptionDraft(item.label);
-    setScanPreview((prev) => (prev ? prev.filter((p) => p !== item) : null));
-  };
-
-  const addAllScanItems = () => {
-    if (!scanPreview?.length) return;
-    const toAdd = scanPreview;
-    setAnnotations((prev) => {
-      commit(prev);
-      const newOnes: Annotation[] = toAdd.map((it, i) => ({
-        id: `auto-${Date.now()}-${i}`,
-        label: it.label,
-        box: it.box,
-        severity: "minor",
-      }));
-      return [...prev, ...newOnes];
-    });
-    setScanPreview(null);
-  };
-
-  const dismissScanPreview = () => setScanPreview(null);
-
-  const handleImageTap = async (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!tapMode || !imageDataUrl || processing) return;
+  const handleImageTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!tapMode || !imageDataUrl) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
-    if (!usage.requestAiCall()) return;
-    setProcessing(true);
-    setBusyText("Outlining tapped spot…");
     setError(null);
-    try {
-      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
-      const result = await identify({
-        data: { imageBase64: imageDataUrl, mimeType: mime, point: { x, y } },
-      });
-      if (result.error) setError(result.error);
-      if (!result.box) {
-        // Fallback: drop a small box at the tap point so the user still gets an annotation
-        const fallback: Box = {
-          x: Math.max(0, x - 0.05),
-          y: Math.max(0, y - 0.05),
-          w: 0.1,
-          h: 0.1,
-        };
-        addAnnotationAndSelect(fallback);
-        setError("AI couldn't outline that spot. Drag the box to position it.");
-      } else {
-        addAnnotationAndSelect(result.box);
-      }
-      if (!result.error) usage.recordAiCall();
-      analytics.capture(result.error ? "ai_tag_failed" : "ai_tag_completed", {
-        method: "tap",
-        used_fallback_box: !result.box,
-      });
-    } catch (err) {
-      console.error(err);
-      setError("Something went wrong. Try again.");
-      analytics.captureException(err, { flow: "tap_identify" });
-    } finally {
-      setProcessing(false);
-      setBusyText("");
-    }
+    addAnnotationAndSelect(createTapFallbackBox({ x, y }));
+    setTapMode(false);
+    analytics.capture("manual_tag_created", { method: "tap" });
   };
 
   // ---- Drawing a new box (Box mode) ----
@@ -512,7 +418,7 @@ function AnnotatePage() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!boxMode || processing) return;
+    if (!boxMode) return;
     e.preventDefault();
     (e.currentTarget as any).setPointerCapture?.(e.pointerId);
     const p = getPointerPos(e);
@@ -531,7 +437,7 @@ function AnnotatePage() {
     });
   };
 
-  const handlePointerUp = async () => {
+  const handlePointerUp = () => {
     if (!boxMode || !drawingRef.current.active || !drawingRef.current.start) return;
     drawingRef.current = { active: false, start: null };
     const d = drawing;
@@ -545,37 +451,10 @@ function AnnotatePage() {
     };
     if (userBox.w < 0.02 || userBox.h < 0.02) return;
 
-    // Use the drawn box exactly as-is. Ask AI for a label only, never resize/move.
     addAnnotationAndSelect(userBox);
     setError(null);
-    if (!usage.requestAiCall()) return;
-    try {
-      const mime = imageDataUrl.substring(5, imageDataUrl.indexOf(";"));
-      const result = await identifyBox({
-        data: { imageBase64: imageDataUrl, mimeType: mime, region: userBox },
-      });
-      const label = result?.label?.trim();
-      if (label) {
-        setAnnotations((prev) =>
-          prev.map((a) =>
-            a.box === userBox ||
-            (a.box.x === userBox.x &&
-              a.box.y === userBox.y &&
-              a.box.w === userBox.w &&
-              a.box.h === userBox.h)
-              ? { ...a, label: a.label || label }
-              : a,
-          ),
-        );
-      }
-      if (!result?.error) usage.recordAiCall();
-      analytics.capture(result?.error ? "ai_tag_failed" : "ai_tag_completed", {
-        method: "box",
-      });
-    } catch (err) {
-      console.error(err);
-      analytics.captureException(err, { flow: "box_identify" });
-    }
+    setBoxMode(false);
+    analytics.capture("manual_tag_created", { method: "box" });
   };
 
   // ---- Move / resize selected annotation ----
@@ -785,7 +664,7 @@ function AnnotatePage() {
   };
 
   const startListening = () => {
-    if (!recognitionRef.current || listening || processing) return;
+    if (!recognitionRef.current || listening) return;
     setError(null);
     try {
       recognitionRef.current.start();
@@ -814,10 +693,10 @@ function AnnotatePage() {
     setSelectedId(null);
     setCaptionDraft("");
     setError(null);
+    setNotice(null);
     setTapMode(false);
     setBoxMode(false);
     setZoom({ s: 1, x: 0, y: 0 });
-    setScanPreview(null);
     setVideoFile(null);
     setShowVideoPicker(false);
     setVideoResumeTime(0);
@@ -840,6 +719,8 @@ function AnnotatePage() {
 
   const exportImage = async (share: boolean) => {
     if (!imageDataUrl || !imageSize) return;
+    setError(null);
+    setNotice(null);
     // Auto-save any in-progress caption first
     flushCaptionDraft();
     const exportList = selectedId
@@ -915,13 +796,13 @@ function AnnotatePage() {
           )
           .join("\n");
         if (share) {
-          const shared = await shareImage({
+          const shareOutcome = await shareImage({
             blob,
             fileName,
             title: "SoupyTag inspection",
             text: shareText,
           });
-          if (shared) {
+          if (shareOutcome === "shared") {
             analytics.capture("export_completed", {
               method: "share",
               tag_count: exportList.length,
@@ -930,15 +811,23 @@ function AnnotatePage() {
             await recordShareAndMaybeReview();
             return;
           }
+          if (shareOutcome === "cancelled") {
+            setNotice("Sharing canceled.");
+            return;
+          }
         }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(url);
+        const saved = await saveImage({ blob, fileName });
+        if (!saved) {
+          setError(share ? "Couldn't share or save this image." : "Couldn't save this image.");
+          return;
+        }
+        setNotice(
+          share
+            ? "Sharing wasn't available, so SoupyTag saved the image instead."
+            : "Saved to Pictures/SoupyTag.",
+        );
         analytics.capture("export_completed", {
-          method: "download",
+          method: share ? "share_fallback_save" : "download",
           tag_count: exportList.length,
           timestamp_included: includeTimestamp,
         });
@@ -972,8 +861,7 @@ function AnnotatePage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Tag the problem.</h1>
             <p className="text-sm text-neutral-400 mt-1">
-              Snap a photo of broken things or construction mistakes. AI outlines the spot — you
-              describe what's wrong.
+              Snap a photo, tap or box the spot, then describe exactly what's wrong.
             </p>
           </div>
           <button
@@ -1063,11 +951,6 @@ function AnnotatePage() {
             }}
           />
         )}
-        <PaywallDialog
-          open={usage.paywallOpen}
-          onOpenChange={usage.setPaywallOpen}
-          onUnlocked={usage.markUnlocked}
-        />
         {appOverlays}
       </div>
     );
@@ -1101,15 +984,7 @@ function AnnotatePage() {
           <span className="text-sm font-medium text-neutral-400">
             {annotations.length} tag{annotations.length === 1 ? "" : "s"}
           </span>
-          {!usage.unlocked && (
-            <button
-              onClick={() => usage.setPaywallOpen(true)}
-              className="text-[10px] text-yellow-400 hover:underline"
-            >
-              {usage.remaining}/{FREE_LIMIT} free AI tags
-            </button>
-          )}
-          {usage.unlocked && <span className="text-[10px] text-yellow-400">✓ Unlimited</span>}
+          <span className="text-[10px] text-yellow-400">AI add-on coming soon</span>
         </div>
         <div className="flex gap-2">
           <button
@@ -1340,24 +1215,23 @@ function AnnotatePage() {
 
       {/* Status line */}
       <div className="px-4 pt-2 min-h-[1.75rem] text-center text-sm" aria-live="polite">
-        {processing && (
-          <span className="inline-flex items-center gap-2 text-neutral-300">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            {busyText || "Working…"}
-          </span>
-        )}
-        {!processing && tapMode && !error && (
+        {tapMode && !error && (
           <span className="text-yellow-400 font-medium">Tap the problem area</span>
         )}
-        {!processing && boxMode && !error && (
+        {boxMode && !error && (
           <span className="text-yellow-400 font-medium">Drag a box around the problem</span>
         )}
-        {!processing && !tapMode && !boxMode && !selected && annotations.length > 0 && !error && (
+        {!tapMode && !boxMode && !selected && annotations.length > 0 && !error && (
           <span className="text-neutral-500">Tap any box to edit its description</span>
         )}
         {error && (
           <div role="alert" className="text-red-400 mt-1">
             {error}
+          </div>
+        )}
+        {!error && notice && (
+          <div role="status" className="text-emerald-400 mt-1">
+            {notice}
           </div>
         )}
       </div>
@@ -1413,7 +1287,6 @@ function AnnotatePage() {
             {speechSupported && (
               <button
                 onClick={listening ? stopListening : startListening}
-                disabled={processing}
                 className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
                   listening
                     ? "bg-red-500 animate-pulse text-white"
@@ -1433,37 +1306,6 @@ function AnnotatePage() {
             </button>
           </div>
         </div>
-      ) : scanPreview ? (
-        <div className="px-4 pt-2 pb-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-neutral-400">Tap to add one at a time</span>
-            <div className="flex gap-2">
-              <button
-                onClick={addAllScanItems}
-                className="text-xs font-medium text-yellow-400 active:text-yellow-300"
-              >
-                Add all
-              </button>
-              <button
-                onClick={dismissScanPreview}
-                className="text-xs text-neutral-500 active:text-neutral-300"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {scanPreview.map((item, i) => (
-              <button
-                key={i}
-                onClick={() => addScanItem(item)}
-                className="shrink-0 px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-xs text-neutral-200 active:bg-neutral-700 text-left"
-              >
-                <span className="font-semibold text-yellow-400">{i + 1}.</span> {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
       ) : (
         <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
           <ModeButton
@@ -1475,7 +1317,6 @@ function AnnotatePage() {
             }}
             icon={<Hand className="w-6 h-6" />}
             label={tapMode ? "Tap on" : "Tap"}
-            disabled={processing}
           />
           <ModeButton
             active={boxMode}
@@ -1486,26 +1327,19 @@ function AnnotatePage() {
             }}
             icon={<Square className="w-6 h-6" />}
             label={boxMode ? "Box on" : "Box"}
-            disabled={processing}
           />
           <button
-            onClick={handleAutoScan}
-            disabled={processing}
-            className="flex flex-col items-center gap-1 text-xs text-neutral-300 disabled:opacity-40 active:text-white"
-            aria-label="Auto-detect everything"
+            onClick={() => setError("AI auto-find is coming soon. Use Tap or Box for now.")}
+            className="flex flex-col items-center gap-1 text-xs text-neutral-500 active:text-neutral-300"
+            aria-label="AI auto-find coming soon"
           >
-            <span className="w-14 h-14 rounded-full bg-neutral-800 flex items-center justify-center border border-neutral-700">
-              <Sparkles className="w-6 h-6 text-yellow-400" />
+            <span className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center border border-neutral-800">
+              <Sparkles className="w-6 h-6 text-neutral-500" />
             </span>
-            Auto-find
+            AI soon
           </button>
         </div>
       )}
-      <PaywallDialog
-        open={usage.paywallOpen}
-        onOpenChange={usage.setPaywallOpen}
-        onUnlocked={usage.markUnlocked}
-      />
       {appOverlays}
     </div>
   );

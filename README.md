@@ -1,15 +1,15 @@
 # SoupyTag
 
-Snap a photo (or grab a frame from a video), tap or describe what's in it, and SoupyTag draws a labeled box around it. Built for field techs, inspectors, and anyone who needs to quickly annotate "this thing, right here" and share it.
+Snap a photo (or grab a frame from a video), mark the exact problem, describe it, and share a clean tagged image. Built for field techs, inspectors, and anyone who needs to make "this thing, right here" unmistakable.
 
 ## What it does
 
 - **Capture** a photo with your phone camera, pick one from your library, or scrub through a video and grab any frame.
-- **Tag objects** three ways:
-  - **Scan** — AI finds notable objects in the whole photo automatically.
-  - **Tap** — point at something, AI identifies it and draws a tight box.
-  - **Draw** — drag a box around a region, AI labels what's inside.
-  - **Voice/text** — say or type *"the dented unit on the left"* and AI finds it.
+- **Tag problems** two dependable ways:
+  - **Tap** — point at the problem and SoupyTag places a movable box immediately.
+  - **Draw** — drag the exact boundary yourself.
+- **Describe** each tag with voice or text and mark it info, minor, or major.
+- **AI auto-find** is retained as future add-on work but is not enabled in the 1.2.1 tester UI.
 - **Edit** labels, remove tags, undo.
 - **Export** the annotated photo to your camera roll or share sheet (Teams, email, SMS, etc.).
 
@@ -17,21 +17,21 @@ Snap a photo (or grab a frame from a video), tap or describe what's in it, and S
 
 - **Frontend:** TanStack Start (React 19, Vite 7), Tailwind CSS v4, shadcn/ui
 - **Mobile shell:** Capacitor (Android + iOS wrap of the web app)
-- **AI:** Lovable AI Gateway → Google Gemini 2.5 Flash & Pro for object detection
+- **Future AI add-on:** Lovable AI Gateway → Google Gemini for optional object detection
 - **Backend:** Lovable Cloud (server functions only; no DB required for core flow)
 - **Voice input:** Web Speech API (browser-native, free)
 - **Payments:** RevenueCat → Google Play Billing for the one-time unlock
 
 ## Pricing model
 
-- **Free trial:** 5 AI tags per device.
-- **Unlock:** $2.99 one-time in-app purchase for unlimited AI tagging.
-- Each AI tag costs the operator roughly **$0.003** (less than half a cent), so break-even is around 850 tags per paying user.
+- **Core manual tagging:** available without an AI counter or paywall in 1.2.1.
+- **Existing purchase:** the $2.99 `unlock_unlimited` product and RevenueCat `unlimited` entitlement remain unchanged and restorable.
+- **Future AI add-on:** sales are deferred until auto-find is accurate and dependable enough to charge for.
 
 ## Privacy
 
-- Photos are sent to Google's Gemini API **only** when you trigger an AI action (scan, tap, draw, voice).
-- Photos are **not** stored on any server — they're processed in-memory and discarded.
+- The 1.2.1 manual capture, tagging, description, save, and share flow does not send photos to an AI service.
+- If optional AI returns, photos will be processed only after an explicit AI action and will not be stored by SoupyTag.
 - No accounts, no tracking, no analytics on photo content.
 - Full policy: `/privacy` route in the app.
 
@@ -44,7 +44,7 @@ bun install
 bun run dev
 ```
 
-App runs at `http://localhost:8080`. Lovable Cloud must be enabled for AI features to work.
+App runs at `http://localhost:8080`. The 1.2.1 core flow does not require AI services.
 
 ---
 

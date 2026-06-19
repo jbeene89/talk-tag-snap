@@ -38,7 +38,7 @@ export function FeedbackDialog({
           analyticsDistinctId: analytics.distinctId ?? undefined,
           diagnostics: includeDiagnostics
             ? {
-                appVersion: "1.2.0",
+                appVersion: "1.2.1",
                 platform: navigator.platform || "unknown",
                 userAgent: navigator.userAgent,
               }

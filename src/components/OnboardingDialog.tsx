@@ -3,8 +3,7 @@ import { Camera, Check, Mic, Share2, Sparkles } from "lucide-react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAnalytics } from "@/lib/analytics";
-
-const ONBOARDING_KEY = "soupytag:onboarding:v1:complete";
+import { ONBOARDING_KEY } from "@/lib/onboarding";
 
 const STEPS = [
   {
@@ -15,8 +14,8 @@ const STEPS = [
   },
   {
     eyebrow: "02 / LOCATE",
-    title: "Point. Box. Auto-find.",
-    body: "Let AI locate objects, tap a precise spot, or draw the boundary yourself.",
+    title: "Tap it or box it.",
+    body: "Tap a precise spot or draw the boundary yourself. AI auto-find is coming soon.",
     icon: Sparkles,
   },
   {
@@ -32,11 +31,6 @@ const STEPS = [
     icon: Share2,
   },
 ] as const;
-
-export function hasCompletedOnboarding(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(ONBOARDING_KEY) === "1";
-}
 
 export function OnboardingDialog({
   open,
