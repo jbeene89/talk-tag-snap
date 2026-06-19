@@ -8,7 +8,21 @@ import { claimAdminIfFirstUser } from "@/lib/orders.functions";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
-  head: () => ({ meta: [{ title: "Admin sign in" }] }),
+  head: () => ({
+    meta: [
+      { title: "Admin sign in — SoupyTag" },
+      {
+        name: "description",
+        content: "Sign in to the SoupyTag admin to view and manage incoming WrapKit Cloud orders.",
+      },
+      { property: "og:title", content: "Admin sign in — SoupyTag" },
+      {
+        property: "og:description",
+        content: "Sign in to the SoupyTag admin to view and manage incoming WrapKit Cloud orders.",
+      },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
 });
 
 function LoginPage() {

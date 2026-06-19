@@ -48,6 +48,23 @@ export const Route = createFileRoute("/")({
         content:
           "Snap a photo, mark the problem, describe what's wrong, and share a tagged image in seconds.",
       },
+      { property: "og:url", content: "https://soupytag.company/" },
+    ],
+    links: [{ rel: "canonical", href: "https://soupytag.company/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "SoupyTag",
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web, Android",
+          description:
+            "Photo defect tagging with voice and AI. Snap, mark the problem, describe it, and share a tagged image in seconds.",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        }),
+      },
     ],
   }),
 });
