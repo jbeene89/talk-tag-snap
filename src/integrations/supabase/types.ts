@@ -14,36 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      app_feedback: {
-        Row: {
-          category: string
-          created_at: string
-          diagnostics: Json | null
-          email: string | null
-          id: string
-          message: string
-          status: string
-        }
-        Insert: {
-          category: string
-          created_at?: string
-          diagnostics?: Json | null
-          email?: string | null
-          id?: string
-          message: string
-          status?: string
-        }
-        Update: {
-          category?: string
-          created_at?: string
-          diagnostics?: Json | null
-          email?: string | null
-          id?: string
-          message?: string
-          status?: string
-        }
-        Relationships: []
-      }
       email_send_log: {
         Row: {
           created_at: string
