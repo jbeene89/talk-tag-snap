@@ -891,6 +891,13 @@ function AnnotatePage() {
           </button>
         </header>
 
+        <div className="mx-5 mb-2 rounded-xl bg-yellow-400/10 border border-yellow-400/30 px-4 py-3 text-sm text-yellow-300 flex items-center gap-3">
+          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.0161l.9347-3.7117 1.9906-.0042-.9393 3.7159h-2.986zm-9.9203.9956h2.986l-.9393-3.7159-1.9906.0042.9347 3.7117h.0002zm14.7458.6719c-.62-.1905-1.3085-.0288-1.7188.4048l-1.8006 1.8877H7.1162l-1.8006-1.8877c-.4103-.4336-1.0988-.5953-1.7188-.4048-1.2057.3702-2.068 1.4807-2.068 2.7928v7.0882c0 1.2048.9766 2.1814 2.1814 2.1814h15.5814c1.2048 0 2.1814-.9766 2.1814-2.1814v-7.0882c0-1.3121-.8623-2.4226-2.068-2.7928z"/>
+          </svg>
+          <span>Check out our new Android app — coming in a few days.</span>
+        </div>
+
         <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
           <button
             onClick={() => fileInputRef.current?.click()}
