@@ -6,8 +6,8 @@ import { saveImageWithAdapters } from "./export-image.ts";
 test("uses the native image saver when it is available", async () => {
   const calls: string[] = [];
   const result = await saveImageWithAdapters(new Blob(["image"]), "tagged.jpg", {
-    saveNative: async () => calls.push("native"),
-    downloadWeb: () => calls.push("web"),
+    saveNative: async () => { calls.push("native"); },
+    downloadWeb: () => { calls.push("web"); },
   });
 
   assert.equal(result, true);
