@@ -33,7 +33,8 @@ export const submitFeedback = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     if (data.website) return { ok: true };
 
-    const { data: inserted, error } = await supabaseAdmin
+    const db = supabaseAdmin as any;
+    const { data: inserted, error } = await db
       .from("app_feedback")
       .insert({
         category: data.category,
