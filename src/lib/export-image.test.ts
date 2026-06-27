@@ -21,7 +21,7 @@ test("falls back to a browser download when native saving fails", async () => {
       calls.push("native");
       throw new Error("plugin unavailable");
     },
-    downloadWeb: () => calls.push("web"),
+    downloadWeb: () => { calls.push("web"); },
   });
 
   assert.equal(result, true);
