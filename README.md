@@ -9,9 +9,10 @@ Snap a photo (or grab a frame from a video), mark the exact problem, describe it
   - **Tap** — point at the problem and SoupyTag places a movable box immediately.
   - **Draw** — drag the exact boundary yourself.
 - **Describe** each tag with voice or text and mark it info, minor, or major.
-- **AI auto-find** is retained as future add-on work but is not enabled in the 1.2.1 tester UI.
+- **AI auto-find** is retained as future add-on work but is not enabled in the current UI.
 - **Edit** labels, remove tags, undo.
 - **Export** the annotated photo to your camera roll or share sheet (Teams, email, SMS, etc.).
+- **Works offline** — since 1.3.0 the Android app packages the web bundle inside the APK, so capture, tagging, and export work with no signal.
 
 ## Tech
 
@@ -24,13 +25,13 @@ Snap a photo (or grab a frame from a video), mark the exact problem, describe it
 
 ## Pricing model
 
-- **Core manual tagging:** available without an AI counter or paywall in 1.2.1.
+- **Core manual tagging:** available without an AI counter or paywall.
 - **Existing purchase:** the $2.99 `unlock_unlimited` product and RevenueCat `unlimited` entitlement remain unchanged and restorable.
 - **Future AI add-on:** sales are deferred until auto-find is accurate and dependable enough to charge for.
 
 ## Privacy
 
-- The 1.2.1 manual capture, tagging, description, save, and share flow does not send photos to an AI service.
+- The manual capture, tagging, description, save, and share flow does not send photos to an AI service.
 - If optional AI returns, photos will be processed only after an explicit AI action and will not be stored by SoupyTag.
 - No accounts, no tracking, no analytics on photo content.
 - Full policy: `/privacy` route in the app.
@@ -44,7 +45,7 @@ bun install
 bun run dev
 ```
 
-App runs at `http://localhost:8080`. The 1.2.1 core flow does not require AI services.
+App runs at `http://localhost:8080`. The core flow does not require AI services.
 
 ---
 
@@ -86,25 +87,36 @@ This is a publishable client key — safe to ship in the app binary, but **don't
 
 ### Step 4 — Build and ship the Android app
 
+Since 1.3.0 the Android app **bundles the web app inside the APK** (offline-capable, instant startup). `bun run build:mobile` produces an SPA build in `dist/client`, which `cap sync` copies into the native project.
+
 ```bash
 bun install
-bun run build
-bunx cap sync android
+bun run sync:android   # = build:mobile + cap sync android
 bunx cap open android
 ```
 
 Android Studio opens. From there:
-1. **Build → Generate Signed Bundle / APK → Android App Bundle (.aab)**
-2. Upload the resulting `.aab` to Play Console under **Release → Internal testing**.
-3. Add your own Google account as an internal tester so you can purchase the unlock without being charged real money (Google refunds test purchases automatically).
-4. Test the purchase end-to-end, then promote to **Production** when ready.
+1. Bump `versionCode` and `versionName` in `android/app/build.gradle` if you haven't already.
+2. **Build → Generate Signed Bundle / APK → Android App Bundle (.aab)**
+3. Upload the resulting `.aab` to Play Console under **Release → Internal testing**.
+4. Add your own Google account as an internal tester so you can purchase the unlock without being charged real money (Google refunds test purchases automatically).
+5. Test the purchase end-to-end, then promote to **Production** when ready.
+
+> **Note:** because the web app is bundled, app UI changes now require a new `.aab` upload — publishing on Lovable only updates the website, not the installed app. To point a debug build at a dev server instead, set `CAPACITOR_SERVER_URL=http://<your-ip>:8080` before `cap sync`.
+
+### Step 5 — Verified deep links (App Links)
+
+The manifest declares `autoVerify` App Links for `https://soupytag.company`. For them to work, put your **app signing key's** SHA-256 fingerprint (Play Console → Setup → App signing) into `public/.well-known/assetlinks.json` and republish the website. Details in `play-store-listing.md`.
 
 ### Sanity checklist before submitting for review
 
 - [ ] Privacy policy URL works (`/privacy` route)
 - [ ] App icon and screenshots uploaded
+- [ ] Store listing copy matches `store-assets/play-listing.md` (no AI or unshipped-feature claims)
 - [ ] "Restore previous purchase" button visible in the paywall (required by Google)
 - [ ] Tested unlock + restore on a real device with an internal-test account
+- [ ] Airplane-mode test: app opens, tagging and export work offline
+- [ ] `assetlinks.json` deployed with the app-signing SHA-256 (deep links verify in Play Console)
 - [ ] Removed any debug logging from production builds
 
 ---

@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAnalytics } from "@/lib/analytics";
 import { restorePurchases } from "@/lib/billing";
 import { openStoreListing } from "@/lib/native";
+import { APP_VERSION } from "@/lib/version";
 
 export function SettingsDialog({
   open,
@@ -117,7 +118,7 @@ export function SettingsDialog({
           </a>
 
           <div className="border-t border-neutral-800 pt-4 text-xs leading-5 text-neutral-500">
-            <p className="font-bold text-neutral-300">SoupyTag 1.2.1</p>
+            <p className="font-bold text-neutral-300">SoupyTag {APP_VERSION}</p>
             <p>Package: com.soupytag.app</p>
             <p>AI add-on coming soon. Existing unlimited purchases remain recognized.</p>
           </div>

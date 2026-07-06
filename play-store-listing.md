@@ -1,85 +1,54 @@
 # Google Play Store Listing — SoupyTag
 
-> Copy the sections below into the Google Play Console when setting up or updating your store listing.
-
----
-
-## App title
-
-**SoupyTag — Tag Defects with Voice & AI**
-
-*(You can also use **Soupy Talk & Tag** if you prefer that as the display name.)*
-
----
-
-## Short description (max 80 characters)
-
-Snap photos, tap defects, describe with voice. Share tagged reports in seconds — no account needed.
-
----
-
-## Full description
-
-SoupyTag turns photos into structured inspection reports.
-
-Snap a picture of any item, tap the spot you want to flag, and describe the problem with your voice. The app outlines the defect for you and builds a clean, shareable image with labels and severity markers.
-
-Perfect for field technicians, quality control, property managers, and anyone who needs to document issues quickly and clearly.
-
-**Key features:**
-• **Quick Capture** — Take a photo or pick one from your gallery in one tap.
-• **Smart Tagging** — Tap anywhere on the photo to drop a pin and label the issue.
-• **Voice Descriptions** — Describe defects hands-free; your voice note is saved with the tag.
-• **Annotate & Markup** — Draw outlines, add severity levels, and number each issue automatically.
-• **One-Tap Share** — Export tagged images via email, messages, or any app on your phone.
-• **Offline Mode** — Capture and tag even without a signal; share when you're back online.
-• **Wrap Kits** — Browse and manage WrapKit Cloud app bundles from inside SoupyTag.
-• **No Account Required** — Jump straight in. No signup, no passwords, no hassle.
-
-Download SoupyTag and turn every photo into a clear, professional report.
+> The canonical, up-to-date listing copy lives in [`store-assets/play-listing.md`](store-assets/play-listing.md).
+> Use that file when filling in the Play Console. This file keeps the Console setup details that
+> aren't listing copy: category, deep links, and keywords.
 
 ---
 
 ## Category
 
-**Primary:** Productivity  
+**Primary:** Productivity
 **Secondary:** Business
 
 ---
 
 ## Deep links / Android App Links
 
-**Web domain:** `https://soupytag.company`  
+**Web domain:** `https://soupytag.company`
 **Package name:** `com.soupytag.app`
 
-To enable verified deep links (Android App Links), upload the following SHA-256 fingerprint into `public/.well-known/assetlinks.json` and deploy it to `https://soupytag.company/.well-known/assetlinks.json`.
+The Android manifest declares a verified App Links intent filter (`autoVerify`) for
+`https://soupytag.company`. For verification to succeed, the signing certificate's SHA-256
+fingerprint must be live at `https://soupytag.company/.well-known/assetlinks.json`.
 
 ### How to get your SHA-256 fingerprint
 
-1. Open Android Studio (or use `keytool` / `gradlew`).
-2. For your signing keystore, run:
+1. If you use **Play App Signing** (recommended): Play Console → **Setup → App signing** → copy
+   the SHA-256 from the *app signing key certificate* (not the upload key).
+2. If you sign locally, run:
    ```bash
    keytool -list -v -keystore your-keystore.jks
    ```
-3. Copy the **SHA256** value under "Certificate fingerprints".
-4. Paste it into `public/.well-known/assetlinks.json` in place of `INSERT_YOUR_SHA256_FINGERPRINT_HERE`.
-5. Republish the site so the file is live at `https://soupytag.company/.well-known/assetlinks.json`.
-6. In the Google Play Console, go to **Deep links** and verify your domain.
+   and copy the **SHA256** value under "Certificate fingerprints".
+3. Paste it into `public/.well-known/assetlinks.json` in place of `INSERT_YOUR_SHA256_FINGERPRINT_HERE`.
+4. Republish the site so the file is live at `https://soupytag.company/.well-known/assetlinks.json`.
+5. In the Google Play Console, go to **Grow → Deep links** and confirm the domain verifies.
 
-### Supported deep link paths (suggested)
+### Supported deep link paths
 
 - `https://soupytag.company/` — Opens the app home screen
-- `https://soupytag.company/share/{id}` — Opens a specific shared tag/report *(if you add share links later)*
+- `https://soupytag.company/privacy` — Opens the privacy policy
 
 ---
 
 ## Tags / search keywords (Play Console)
 
-photo tagging, defect inspection, quality control, field report, voice notes, image annotation, markup tool, offline camera, technician app, property inspection, snag list, punch list
+photo markup, image annotation, defect inspection, quality control, field report, voice notes, punch list, snag list, property inspection, technician app, photo notes, markup tool
 
 ---
 
 ## Contact & support
 
-**Developer website:** https://soupytag.company  
+**Developer website:** https://soupytag.company
 **Privacy policy:** https://soupytag.company/privacy
