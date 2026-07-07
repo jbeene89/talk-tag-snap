@@ -1,11 +1,17 @@
 import { useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { Capacitor } from "@capacitor/core";
 import { Bug, CheckCircle2, Lightbulb, Loader2, Mail, MessageSquare } from "lucide-react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useAnalytics } from "@/lib/analytics";
-import { submitFeedback } from "@/lib/feedback.functions";
+import { APP_VERSION, PROD_ORIGIN } from "@/lib/version";
+
+// The bundled native app runs on a local WebView origin, so relative URLs
+// would never reach the backend — post to the production API instead.
+const FEEDBACK_ENDPOINT = Capacitor.isNativePlatform()
+  ? `${PROD_ORIGIN}/api/feedback`
+  : "/api/feedback";
 
 type Category = "bug" | "idea" | "other";
 
@@ -16,7 +22,6 @@ export function FeedbackDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const submit = useServerFn(submitFeedback);
   const analytics = useAnalytics();
   const [category, setCategory] = useState<Category>("idea");
   const [message, setMessage] = useState("");
@@ -29,8 +34,10 @@ export function FeedbackDialog({
     event.preventDefault();
     setStatus("busy");
     try {
-      await submit({
-        data: {
+      const response = await fetch(FEEDBACK_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           category,
           message,
           email,
@@ -38,13 +45,14 @@ export function FeedbackDialog({
           analyticsDistinctId: analytics.distinctId ?? undefined,
           diagnostics: includeDiagnostics
             ? {
-                appVersion: "1.2.1",
+                appVersion: APP_VERSION,
                 platform: navigator.platform || "unknown",
                 userAgent: navigator.userAgent,
               }
             : undefined,
-        },
+        }),
       });
+      if (!response.ok) throw new Error(`Feedback request failed (${response.status})`);
       analytics.capture("feedback_sent", {
         category,
         has_email: Boolean(email),

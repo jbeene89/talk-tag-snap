@@ -33,7 +33,7 @@ function PrivacyPage() {
           PRIVACY / PLAIN LANGUAGE
         </p>
         <h1 className="mt-3 text-4xl font-black tracking-[-0.04em]">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-neutral-500">Last updated: June 18, 2026</p>
+        <p className="mt-2 text-sm text-neutral-500">Last updated: July 6, 2026</p>
 
         <section className="mt-10 space-y-7 text-sm leading-7 text-neutral-300">
           <PolicySection title="The short version">
@@ -43,9 +43,10 @@ function PrivacyPage() {
           </PolicySection>
 
           <PolicySection title="Photos and AI tagging">
-            In version 1.2.1, Tap and Box are manual tools that run on your device, and AI auto-find
-            is not enabled. If an optional AI feature is offered later, SoupyTag will explain the
-            processing before you choose to use it. Manual annotation and export do not require AI.
+            Tap and Box are manual tools that run on your device, and AI auto-find is not enabled
+            in the current version. If an optional AI feature is offered later, SoupyTag will
+            explain the processing before you choose to use it. Manual annotation and export do not
+            require AI.
           </PolicySection>
 
           <PolicySection title="Camera, files, and microphone">

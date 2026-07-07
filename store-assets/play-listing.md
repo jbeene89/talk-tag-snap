@@ -1,57 +1,55 @@
 # SoupyTag Google Play listing
 
-## App name
+> Canonical listing copy for the Play Console. Paste each section into the matching Console field.
+> Character limits: app name 30, short description 80, full description 4000, release notes 500.
 
-SoupyTag: Photo Markup
+## App name (30 chars max)
 
-## Short description
+SoupyTag: Photo Markup & Notes
 
-Mark problems in photos with boxes, notes, severity labels, and easy sharing.
+## Short description (80 chars max)
+
+Annotate photos fast: box the problem, add voice notes and severity, then share.
 
 ## Full description
 
-Make problems obvious with SoupyTag, the fast visual communication and image annotation app for inspections, field work, maintenance, quality checks, property walkthroughs, and everyday photo notes.
+Make problems obvious with SoupyTag, the fast photo markup and image annotation app for inspections, field service, maintenance, quality control, property walkthroughs, punch lists, snag lists, and everyday photo notes.
 
-Start with a photo, an image from your library, or an exact frame from a video. SoupyTag helps you locate an object, highlight a defect, add a clear note, set its severity, and share a finished marked-up image with the people who need it.
+Start with a photo, an image from your library, or an exact frame from a video. Tap the spot or draw the boundary yourself, dictate or type a note, set a severity, and share a finished marked-up image with the people who need it — all in under a minute, with no account and no signup.
 
 Key features:
 
 - Tap-to-tag and draw-your-own-box annotation tools
-- Voice dictation or typed notes
-- Info, minor, and major severity labels
-- Photo and video-frame capture
-- Multiple annotations on one image
-- Copy a complete text summary
-- Export or share a clean annotated image
+- Voice dictation or typed notes on every tag
+- Info, minor, and major severity labels with color coding
+- Photo capture, gallery import, and video-frame grab
+- Multiple numbered annotations on one image
+- Copy a complete text summary for reports and messages
+- Export a clean annotated image or share it to any app
 - Saved local session so unfinished work survives an app restart
-- AI-assisted auto-find planned as a future optional add-on
+- No account required — open the app and start tagging
 
 Built for clear visual communication:
 
-- Highlight product defects during quality control
-- Document maintenance and repair issues
-- Mark punch-list items on a job site
-- Add notes to property inspection photos
+- Highlight product defects during quality control checks
+- Document maintenance and repair issues in the field
+- Mark punch-list and snag-list items on a job site
+- Add notes to property inspection and walkthrough photos
 - Explain a problem without a long message thread
-- Turn a busy image into an actionable report
+- Turn a busy photo into an actionable defect report
 
-SoupyTag keeps your workflow simple: capture, locate, explain, and send. Analytics are optional and off until you choose to enable them. You can submit feedback, restore your purchase, replay the walkthrough, or rate the app from Settings.
+SoupyTag keeps your workflow simple: capture, locate, explain, and send. Your photos and notes stay on your device unless you share them. Analytics are optional and off until you choose to enable them. You can submit feedback, restore your purchase, replay the walkthrough, or rate the app from Settings.
 
-## Version 1.2.1 release notes
+## Version 1.3.0 release notes (500 chars max)
 
-Meet the faster, more dependable SoupyTag 1.2.1 update:
+SoupyTag 1.3.0 — faster to open, easier to trust:
 
-- New first-run walkthrough
-- New Settings, feedback, and rating options
-- Reliable Android sharing and saving to Pictures/SoupyTag
-- Instant manual tap and box tagging with no loading spinner
-- AI auto-find moved to a future optional add-on
-- Optional privacy-first analytics
-- Accessibility and keyboard improvements
-- Updated privacy information
-- Reliability fixes for purchases, restore, and Android builds
+- Faster, more reliable startup
+- Verified soupytag.company links now open directly in the app
+- Refreshed privacy policy in plain language
+- Small fixes and polish throughout
 
-Your existing saved session and unlimited entitlement are preserved.
+Your saved session and unlimited purchase are preserved.
 
 ## Screenshot sequence
 
