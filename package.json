@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "build:mobile": "MOBILE_BUILD=1 vite build",
     "sync:android": "MOBILE_BUILD=1 vite build && cap sync android",
-    "test": "node --test src/lib/detection-guards.test.ts src/lib/export-image.test.ts src/lib/onboarding.test.ts src/lib/session-persistence.test.ts src/lib/share-image.test.ts",
+    "test": "node --test src/lib/annotations.test.ts src/lib/detection-guards.test.ts src/lib/export-image.test.ts src/lib/onboarding.test.ts src/lib/prefs.test.ts src/lib/session-persistence.test.ts src/lib/share-image.test.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write ."

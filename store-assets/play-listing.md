@@ -19,13 +19,16 @@ Start with a photo, an image from your library, or an exact frame from a video. 
 
 Key features:
 
-- Tap-to-tag and draw-your-own-box annotation tools
+- Tap-to-tag, draw-a-box, or draw-a-circle annotation tools
 - Voice dictation or typed notes on every tag
+- One-tap quick labels for common defects (crack, rust, leak, dent, and more)
 - Info, minor, and major severity labels with color coding
+- Redact tool to hide faces, license plates, and ID numbers before you share
+- Report title and reference/location printed on the shared image and summary
 - Photo capture, gallery import, and video-frame grab
 - Multiple numbered annotations on one image
 - Copy a complete text summary for reports and messages
-- Export a clean annotated image or share it to any app
+- Export as JPG or lossless PNG, or share to any app
 - Saved local session so unfinished work survives an app restart
 - No account required — open the app and start tagging
 
@@ -40,14 +43,17 @@ Built for clear visual communication:
 
 SoupyTag keeps your workflow simple: capture, locate, explain, and send. Your photos and notes stay on your device unless you share them. Analytics are optional and off until you choose to enable them. You can submit feedback, restore your purchase, replay the walkthrough, or rate the app from Settings.
 
-## Version 1.3.0 release notes (500 chars max)
+## Version 1.4.0 release notes (500 chars max)
 
-SoupyTag 1.3.0 — faster to open, easier to trust:
+SoupyTag 1.4.0 — bigger toolkit, cleaner reports:
 
-- Faster, more reliable startup
-- Verified soupytag.company links now open directly in the app
-- Refreshed privacy policy in plain language
-- Small fixes and polish throughout
+- New Circle markup alongside Tap and Box
+- New Redact tool to hide faces, plates, and IDs before sharing
+- Add a report title + reference that print on the image and summary
+- One-tap quick labels for common defects
+- Export as JPG or lossless PNG
+- Optional vibration when a tag is placed
+- Cleaner tagging screen
 
 Your saved session and unlimited purchase are preserved.
 
