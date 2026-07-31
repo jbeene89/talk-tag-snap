@@ -5,13 +5,16 @@ Snap a photo (or grab a frame from a video), mark the exact problem, describe it
 ## What it does
 
 - **Capture** a photo with your phone camera, pick one from your library, or scrub through a video and grab any frame.
-- **Tag problems** two dependable ways:
+- **Tag problems** three dependable ways:
   - **Tap** — point at the problem and SoupyTag places a movable box immediately.
-  - **Draw** — drag the exact boundary yourself.
-- **Describe** each tag with voice or text and mark it info, minor, or major.
+  - **Box** — drag the exact boundary yourself.
+  - **Circle** — switch any tag to an ellipse outline for round features.
+- **Describe** each tag with voice, typing, or one-tap quick labels (crack, rust, leak, …) and mark it info, minor, or major.
+- **Redact** — drag over faces, license plates, or ID numbers to paint them out before sharing.
+- **Report details** — add a title and reference/location that print on the exported image and the copied summary.
 - **AI auto-find** is retained as future add-on work but is not enabled in the current UI.
 - **Edit** labels, remove tags, undo.
-- **Export** the annotated photo to your camera roll or share sheet (Teams, email, SMS, etc.).
+- **Export** the annotated photo (JPG or lossless PNG) to your camera roll or share sheet (Teams, email, SMS, etc.).
 - **Works offline** — since 1.3.0 the Android app packages the web bundle inside the APK, so capture, tagging, and export work with no signal.
 
 ## Tech

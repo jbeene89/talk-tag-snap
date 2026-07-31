@@ -6,9 +6,11 @@ import {
   Download,
   Share2,
   RotateCcw,
-  Sparkles,
   Hand,
   Square,
+  Circle,
+  EyeOff,
+  FileText,
   Check,
   Trash2,
   Undo2,
@@ -23,11 +25,27 @@ import {
 } from "lucide-react";
 
 import { OnboardingDialog } from "@/components/OnboardingDialog";
+import { ReportDetailsDialog, type ReportDetails } from "@/components/ReportDetailsDialog";
 import { createTapFallbackBox } from "@/lib/detection-guards";
 import { useAiUsage } from "@/lib/usage";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { VideoFramePicker } from "@/components/VideoFramePicker";
 import { useAnalytics } from "@/lib/analytics";
+import {
+  type Annotation,
+  type Box,
+  type Severity,
+  type Shape,
+  defectNumbers,
+  isRedaction,
+  QUICK_LABELS,
+  reportFileBase,
+  reportText,
+  sevOf,
+  shapeOf,
+  tagSummary,
+} from "@/lib/annotations";
+import { loadPrefs, savePrefs, type ExportFormat } from "@/lib/prefs";
 import { requestNativeReview, saveImage, shareImage } from "@/lib/native";
 import { hasCompletedCurrentOnboarding } from "@/lib/onboarding";
 import { getSessionPersistenceAction } from "@/lib/session-persistence";
@@ -69,15 +87,6 @@ export const Route = createFileRoute("/")({
   }),
 });
 
-type Box = { x: number; y: number; w: number; h: number };
-type Severity = "info" | "minor" | "major";
-type Annotation = {
-  id: string;
-  label: string;
-  box: Box;
-  severity?: Severity;
-};
-
 type DragKind = "move" | "nw" | "ne" | "sw" | "se" | null;
 
 // Tailwind colors mapped per severity. Used for box border, badge bg, and canvas export.
@@ -101,7 +110,6 @@ const SEV_TEXT: Record<Severity, string> = {
   minor: "text-neutral-950",
   major: "text-white",
 };
-const sevOf = (a: Annotation): Severity => a.severity ?? "minor";
 
 function formatStamp(d: Date, useUTC: boolean): string {
   if (useUTC) {
@@ -133,6 +141,7 @@ function AnnotatePage() {
 
   const [tapMode, setTapMode] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
+  const [redactMode, setRedactMode] = useState(false);
   const [drawing, setDrawing] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(
     null,
   );
@@ -163,6 +172,13 @@ function AnnotatePage() {
   const [includeTimestamp, setIncludeTimestamp] = useState(false);
   const [useUTC, setUseUTC] = useState(false);
   const [capturedAt, setCapturedAt] = useState<Date | null>(null);
+
+  // Report metadata (per inspection) + device preferences (persisted globally).
+  const [reportDetailsOpen, setReportDetailsOpen] = useState(false);
+  const [reportDetails, setReportDetails] = useState<ReportDetails>({ title: "", reference: "" });
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("jpg");
+  const [haptics, setHaptics] = useState(true);
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
   const recognitionRef = useRef<any>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
@@ -173,6 +189,34 @@ function AnnotatePage() {
       analytics.capture("onboarding_started");
     }
   }, [analytics]);
+
+  // Load persisted preferences once on mount.
+  useEffect(() => {
+    const p = loadPrefs(typeof window !== "undefined" ? window.localStorage : undefined);
+    setIncludeTimestamp(p.includeTimestamp);
+    setUseUTC(p.useUTC);
+    setExportFormat(p.exportFormat);
+    setHaptics(p.haptics);
+    setPrefsHydrated(true);
+  }, []);
+
+  // Persist preferences whenever they change (after the initial load).
+  useEffect(() => {
+    if (!prefsHydrated) return;
+    savePrefs(typeof window !== "undefined" ? window.localStorage : undefined, {
+      includeTimestamp,
+      useUTC,
+      exportFormat,
+      haptics,
+    });
+  }, [prefsHydrated, includeTimestamp, useUTC, exportFormat, haptics]);
+
+  const vibrate = useCallback(
+    (ms = 8) => {
+      if (haptics && typeof navigator !== "undefined") navigator.vibrate?.(ms);
+    },
+    [haptics],
+  );
 
   // Speech recognition — dictates into the caption draft
   useEffect(() => {
@@ -221,6 +265,12 @@ function AnnotatePage() {
           setImageDataUrl(data.imageDataUrl);
           setImageSize(data.imageSize);
           setAnnotations(Array.isArray(data.annotations) ? data.annotations : []);
+          if (data.reportDetails && typeof data.reportDetails === "object") {
+            setReportDetails({
+              title: String(data.reportDetails.title ?? ""),
+              reference: String(data.reportDetails.reference ?? ""),
+            });
+          }
         }
       }
     } catch {}
@@ -232,12 +282,15 @@ function AnnotatePage() {
     if (action === "skip") return;
     try {
       if (action === "save" && imageDataUrl && imageSize) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ imageDataUrl, imageSize, annotations }));
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ imageDataUrl, imageSize, annotations, reportDetails }),
+        );
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
     } catch {}
-  }, [sessionHydrated, imageDataUrl, imageSize, annotations]);
+  }, [sessionHydrated, imageDataUrl, imageSize, annotations, reportDetails]);
 
   const [copied, setCopied] = useState(false);
 
@@ -397,19 +450,24 @@ function AnnotatePage() {
 
   // ---- Annotation creation ----
 
-  const addAnnotationAndSelect = useCallback(
-    (box: Box) => {
+  const addAnnotation = useCallback(
+    (box: Box, opts: { kind?: "defect" | "redact" } = {}) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const isRedact = opts.kind === "redact";
       setAnnotations((prev) => {
         commit(prev);
-        return [...prev, { id, label: "", box, severity: "minor" }];
+        const next: Annotation = isRedact
+          ? { id, label: "", box, kind: "redact" }
+          : { id, label: "", box, severity: "minor", shape: "box" };
+        return [...prev, next];
       });
       setSelectedId(id);
       setCaptionDraft("");
-      // Focus caption input after sheet renders
-      requestAnimationFrame(() => captionInputRef.current?.focus());
+      // Focus caption input for defects once the sheet renders (not for redactions).
+      if (!isRedact) requestAnimationFrame(() => captionInputRef.current?.focus());
+      vibrate();
     },
-    [commit],
+    [commit, vibrate],
   );
 
   const handleImageTap = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -419,7 +477,7 @@ function AnnotatePage() {
     const y = (e.clientY - rect.top) / rect.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return;
     setError(null);
-    addAnnotationAndSelect(createTapFallbackBox({ x, y }));
+    addAnnotation(createTapFallbackBox({ x, y }));
     setTapMode(false);
     analytics.capture("manual_tag_created", { method: "tap" });
   };
@@ -435,7 +493,7 @@ function AnnotatePage() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!boxMode) return;
+    if (!boxMode && !redactMode) return;
     e.preventDefault();
     (e.currentTarget as any).setPointerCapture?.(e.pointerId);
     const p = getPointerPos(e);
@@ -444,7 +502,7 @@ function AnnotatePage() {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!boxMode || !drawingRef.current.active || !drawingRef.current.start) return;
+    if ((!boxMode && !redactMode) || !drawingRef.current.active || !drawingRef.current.start) return;
     const p = getPointerPos(e);
     setDrawing({
       x1: drawingRef.current.start.x,
@@ -455,7 +513,8 @@ function AnnotatePage() {
   };
 
   const handlePointerUp = () => {
-    if (!boxMode || !drawingRef.current.active || !drawingRef.current.start) return;
+    if ((!boxMode && !redactMode) || !drawingRef.current.active || !drawingRef.current.start) return;
+    const wasRedact = redactMode;
     drawingRef.current = { active: false, start: null };
     const d = drawing;
     setDrawing(null);
@@ -468,10 +527,11 @@ function AnnotatePage() {
     };
     if (userBox.w < 0.02 || userBox.h < 0.02) return;
 
-    addAnnotationAndSelect(userBox);
+    addAnnotation(userBox, wasRedact ? { kind: "redact" } : {});
     setError(null);
     setBoxMode(false);
-    analytics.capture("manual_tag_created", { method: "box" });
+    setRedactMode(false);
+    analytics.capture("manual_tag_created", { method: wasRedact ? "redact" : "box" });
   };
 
   // ---- Move / resize selected annotation ----
@@ -495,7 +555,7 @@ function AnnotatePage() {
   };
 
   const startBoxDrag = (e: React.PointerEvent, id: string, kind: DragKind, box: Box) => {
-    if (tapMode || boxMode) return; // don't conflict with drawing modes
+    if (tapMode || boxMode || redactMode) return; // don't conflict with drawing modes
     e.stopPropagation();
     e.preventDefault();
     (e.currentTarget as any).setPointerCapture?.(e.pointerId);
@@ -643,14 +703,32 @@ function AnnotatePage() {
     });
   };
 
+  const setShape = (shape: Shape) => {
+    if (!selectedId) return;
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (!target || shapeOf(target) === shape) return prev;
+      commit(prev);
+      return prev.map((a) => (a.id === selectedId ? { ...a, shape } : a));
+    });
+  };
+
+  const insertQuickLabel = (text: string) => {
+    setCaptionDraft((prev) => {
+      const base = prev.trim();
+      return base ? `${base}, ${text}` : text;
+    });
+    requestAnimationFrame(() => captionInputRef.current?.focus());
+  };
+
   const selectExisting = (id: string) => {
-    if (tapMode || boxMode) return;
+    if (tapMode || boxMode || redactMode) return;
     flushCaptionDraft();
     const a = annotations.find((x) => x.id === id);
     if (!a) return;
     setSelectedId(id);
     setCaptionDraft(a.label);
-    requestAnimationFrame(() => captionInputRef.current?.focus());
+    if (!isRedaction(a)) requestAnimationFrame(() => captionInputRef.current?.focus());
   };
 
   const deselect = () => {
@@ -660,24 +738,29 @@ function AnnotatePage() {
   };
 
   const copyAsText = async () => {
-    if (annotations.length === 0) return;
+    setError(null);
     flushCaptionDraft();
-    // Read fresh annotations after flush via functional update
-    setAnnotations((curr) => {
-      const lines = curr.map((a, i) => `${i + 1}. ${a.label?.trim() || "(no description)"}`);
-      const header =
-        includeTimestamp && capturedAt ? `Tagged ${formatStamp(capturedAt, useUTC)}\n\n` : "";
-      const text = header + lines.join("\n");
-      navigator.clipboard
-        ?.writeText(text)
-        .then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-          analytics.capture("annotation_list_copied", { tag_count: curr.length });
-        })
-        .catch(() => setError("Couldn't copy to clipboard."));
-      return curr;
+    // Fold any in-progress caption into the copied list (mirrors exportImage).
+    const list = selectedId
+      ? annotations.map((a) => (a.id === selectedId ? { ...a, label: captionDraft.trim() } : a))
+      : annotations;
+    const text = reportText(list, {
+      title: reportDetails.title,
+      reference: reportDetails.reference,
+      timestamp: includeTimestamp && capturedAt ? formatStamp(capturedAt, useUTC) : undefined,
     });
+    if (!text) {
+      setError("Nothing to copy yet — add a tag or a report title.");
+      return;
+    }
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      analytics.capture("annotation_list_copied", { tag_count: list.length });
+    } catch {
+      setError("Couldn't copy to clipboard.");
+    }
   };
 
   const startListening = () => {
@@ -713,11 +796,13 @@ function AnnotatePage() {
     setNotice(null);
     setTapMode(false);
     setBoxMode(false);
+    setRedactMode(false);
     setZoom({ s: 1, x: 0, y: 0 });
     setVideoFile(null);
     setShowVideoPicker(false);
     setVideoResumeTime(0);
     setCapturedAt(null);
+    setReportDetails({ title: "", reference: "" });
   };
 
   // ---- Export ----
@@ -758,32 +843,82 @@ function AnnotatePage() {
     await new Promise((res) => (img.onload = res));
     ctx.drawImage(img, 0, 0);
 
-    const strokeW = Math.max(4, Math.round(imageSize.w * 0.006));
-    const fontSize = Math.max(20, Math.round(imageSize.w * 0.028));
+    const W = imageSize.w;
+    const H = imageSize.h;
+    const strokeW = Math.max(4, Math.round(W * 0.006));
+    const fontSize = Math.max(20, Math.round(W * 0.028));
+
+    // Redactions first, so defect outlines can sit on top of them.
+    exportList.forEach((a) => {
+      if (!isRedaction(a)) return;
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(a.box.x * W, a.box.y * H, a.box.w * W, a.box.h * H);
+    });
+
     ctx.lineWidth = strokeW;
     ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "top";
 
-    exportList.forEach((a, i) => {
-      const x = a.box.x * imageSize.w;
-      const y = a.box.y * imageSize.h;
-      const w = a.box.w * imageSize.w;
-      const h = a.box.h * imageSize.h;
+    const numbers = defectNumbers(exportList);
+    exportList.forEach((a) => {
+      if (isRedaction(a)) return;
+      const x = a.box.x * W;
+      const y = a.box.y * H;
+      const w = a.box.w * W;
+      const h = a.box.h * H;
       const sev = sevOf(a);
       const color = SEV_HEX[sev];
       ctx.strokeStyle = color;
-      ctx.strokeRect(x, y, w, h);
-      const label = `${i + 1}. ${a.label?.trim() || "(no description)"}`;
+      if (shapeOf(a) === "ellipse") {
+        ctx.beginPath();
+        ctx.ellipse(x + w / 2, y + h / 2, Math.max(1, w / 2), Math.max(1, h / 2), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(x, y, w, h);
+      }
+      const label = `${numbers.get(a.id) ?? ""}. ${a.label?.trim() || "(no description)"}`;
       const pad = fontSize * 0.4;
       const textW = ctx.measureText(label).width + pad * 2;
       const textH = fontSize + pad * 1.2;
       const ty = y - textH < 0 ? y + strokeW : y - textH;
-      const tx = Math.max(0, Math.min(x, imageSize.w - textW));
+      const tx = Math.max(0, Math.min(x, W - textW));
       ctx.fillStyle = color;
       ctx.fillRect(tx, ty, textW, textH);
       ctx.fillStyle = sev === "major" ? "#ffffff" : "#111827";
       ctx.fillText(label, tx + pad, ty + pad * 0.6);
     });
+
+    // Report header banner (title / reference), drawn on top at the image top edge.
+    const headerLines = [
+      reportDetails.title.trim(),
+      reportDetails.reference.trim() ? `Ref: ${reportDetails.reference.trim()}` : "",
+    ].filter(Boolean);
+    if (headerLines.length > 0) {
+      const titleSize = Math.max(22, Math.round(W * 0.032));
+      const subSize = Math.max(16, Math.round(W * 0.022));
+      const padXY = Math.round(titleSize * 0.55);
+      const lineGap = Math.round(subSize * 0.4);
+      const hasSub = headerLines.length > 1;
+      const barH = padXY * 2 + titleSize + (hasSub ? lineGap + subSize : 0);
+      const maxTextW = W - padXY * 2;
+      const fit = (text: string) => {
+        if (ctx.measureText(text).width <= maxTextW) return text;
+        let t = text;
+        while (t.length > 1 && ctx.measureText(`${t}…`).width > maxTextW) t = t.slice(0, -1);
+        return `${t}…`;
+      };
+      ctx.textBaseline = "top";
+      ctx.fillStyle = "rgba(0,0,0,0.68)";
+      ctx.fillRect(0, 0, W, barH);
+      ctx.font = `700 ${titleSize}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "#facc15";
+      ctx.fillText(fit(headerLines[0]), padXY, padXY);
+      if (hasSub) {
+        ctx.font = `500 ${subSize}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = "#e5e7eb";
+        ctx.fillText(fit(headerLines[1]), padXY, padXY + titleSize + lineGap);
+      }
+    }
 
     if (includeTimestamp && capturedAt) {
       const stampSize = Math.max(18, Math.round(imageSize.w * 0.024));
@@ -802,16 +937,19 @@ function AnnotatePage() {
       ctx.textBaseline = "top";
     }
 
+    const isPng = exportFormat === "png";
+    const mime = isPng ? "image/png" : "image/jpeg";
+    const ext = isPng ? "png" : "jpg";
+
     canvas.toBlob(
       async (blob) => {
         if (!blob) return;
-        const fileName = `defect-${Date.now()}.jpg`;
-        const shareText = exportList
-          .map(
-            (annotation, index) =>
-              `${index + 1}. [${sevOf(annotation).toUpperCase()}] ${annotation.label?.trim() || "(no description)"}`,
-          )
-          .join("\n");
+        const fileName = `${reportFileBase(reportDetails.title)}-${Date.now()}.${ext}`;
+        const shareText = reportText(exportList, {
+          title: reportDetails.title,
+          reference: reportDetails.reference,
+          timestamp: includeTimestamp && capturedAt ? formatStamp(capturedAt, useUTC) : undefined,
+        });
         if (share) {
           const shareOutcome = await shareImage({
             blob,
@@ -849,8 +987,8 @@ function AnnotatePage() {
           timestamp_included: includeTimestamp,
         });
       },
-      "image/jpeg",
-      0.92,
+      mime,
+      isPng ? undefined : 0.92,
     );
   };
 
@@ -866,6 +1004,16 @@ function AnnotatePage() {
           setOnboardingOpen(true);
         }}
         onUnlocked={usage.markUnlocked}
+      />
+      <ReportDetailsDialog
+        open={reportDetailsOpen}
+        onOpenChange={setReportDetailsOpen}
+        details={reportDetails}
+        onDetailsChange={setReportDetails}
+        exportFormat={exportFormat}
+        onExportFormatChange={setExportFormat}
+        haptics={haptics}
+        onHapticsChange={setHaptics}
       />
     </>
   );
@@ -982,6 +1130,9 @@ function AnnotatePage() {
 
   // ---------- Annotate screen ----------
   const selected = selectedId ? (annotations.find((a) => a.id === selectedId) ?? null) : null;
+  const selectedIsRedaction = selected ? isRedaction(selected) : false;
+  const defectNumberMap = defectNumbers(annotations);
+  const drawingMode = tapMode || boxMode || redactMode;
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
@@ -1004,12 +1155,18 @@ function AnnotatePage() {
             </button>
           )}
         </div>
-        <div className="flex flex-col items-center leading-tight">
-          <span className="text-sm font-medium text-neutral-400">
-            {annotations.length} tag{annotations.length === 1 ? "" : "s"}
+        <button
+          type="button"
+          onClick={() => setReportDetailsOpen(true)}
+          aria-label="Edit report details"
+          className="flex max-w-[45vw] flex-col items-center rounded-md px-2 leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400"
+        >
+          <span className="flex items-center gap-1 max-w-[45vw] truncate text-sm font-medium text-neutral-200">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-yellow-400" />
+            <span className="truncate">{reportDetails.title.trim() || "Add report details"}</span>
           </span>
-          <span className="text-[10px] text-yellow-400">AI add-on coming soon</span>
-        </div>
+          <span className="text-[10px] text-neutral-500">{tagSummary(annotations)}</span>
+        </button>
         <div className="flex gap-2">
           <button
             onClick={() => setSettingsOpen(true)}
@@ -1109,7 +1266,7 @@ function AnnotatePage() {
         >
           <div
             ref={imageContainerRef}
-            onClick={boxMode ? undefined : handleImageTap}
+            onClick={boxMode || redactMode ? undefined : handleImageTap}
             onPointerDown={handlePointerDown}
             onPointerMove={(e) => {
               handlePointerMove(e);
@@ -1123,8 +1280,8 @@ function AnnotatePage() {
               handlePointerUp();
               endBoxDrag();
             }}
-            className={`relative max-h-full max-w-full ${tapMode || boxMode ? "cursor-crosshair" : ""}`}
-            style={tapMode || boxMode ? { touchAction: "none" } : undefined}
+            className={`relative max-h-full max-w-full ${drawingMode ? "cursor-crosshair" : ""}`}
+            style={drawingMode ? { touchAction: "none" } : undefined}
           >
             <img
               src={imageDataUrl}
@@ -1132,12 +1289,14 @@ function AnnotatePage() {
               className="block max-h-[calc(100vh-300px)] max-w-full object-contain select-none pointer-events-none"
               draggable={false}
             />
-            {(tapMode || boxMode) && (
-              <div className="absolute inset-0 ring-2 ring-yellow-400/60 ring-inset pointer-events-none" />
+            {drawingMode && (
+              <div
+                className={`absolute inset-0 ring-2 ring-inset pointer-events-none ${redactMode ? "ring-white/50" : "ring-yellow-400/60"}`}
+              />
             )}
             {drawing && (
               <div
-                className="absolute border-2 border-yellow-400 bg-yellow-400/15 pointer-events-none"
+                className={`absolute pointer-events-none border-2 ${redactMode ? "border-white/80 bg-black/60" : "border-yellow-400 bg-yellow-400/15"}`}
                 style={{
                   left: `${Math.min(drawing.x1, drawing.x2) * 100}%`,
                   top: `${Math.min(drawing.y1, drawing.y2) * 100}%`,
@@ -1149,16 +1308,27 @@ function AnnotatePage() {
 
             {/* Annotation boxes */}
             <div className="absolute inset-0">
-              {annotations.map((a, i) => {
+              {annotations.map((a) => {
                 const isSelected = a.id === selectedId;
+                const redact = isRedaction(a);
                 const sev = sevOf(a);
+                const num = defectNumberMap.get(a.id);
+                const ellipse = !redact && shapeOf(a) === "ellipse";
                 return (
                   <div
                     key={a.id}
                     role="button"
-                    tabIndex={tapMode || boxMode ? -1 : 0}
-                    aria-label={`Tag ${i + 1}: ${a.label || "No description"}. Severity ${sev}.`}
-                    className={`absolute ${SEV_BORDER[sev]} ${isSelected ? "border-2 bg-white/5" : "border-[3px]"} ${tapMode || boxMode ? "pointer-events-none" : ""}`}
+                    tabIndex={drawingMode ? -1 : 0}
+                    aria-label={
+                      redact
+                        ? "Redaction — hidden area"
+                        : `Tag ${num}: ${a.label || "No description"}. Severity ${sev}.`
+                    }
+                    className={`absolute ${
+                      redact
+                        ? "border border-neutral-500 bg-black"
+                        : `${SEV_BORDER[sev]} ${isSelected ? "border-2 bg-white/5" : "border-[3px]"}`
+                    } ${ellipse ? "rounded-full" : ""} ${drawingMode ? "pointer-events-none" : ""}`}
                     style={{
                       left: `${a.box.x * 100}%`,
                       top: `${a.box.y * 100}%`,
@@ -1181,28 +1351,34 @@ function AnnotatePage() {
                       }
                     }}
                   >
-                    <span
-                      className="absolute -top-6 flex items-center gap-1 pointer-events-none"
-                      style={
-                        a.box.x + a.box.w / 2 > 0.55
-                          ? { right: 0, flexDirection: "row-reverse" }
-                          : { left: 0 }
-                      }
-                    >
-                      <span
-                        className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow`}
-                      >
-                        {i + 1}
+                    {redact ? (
+                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-neutral-500">
+                        <EyeOff className="h-4 w-4" />
                       </span>
-                      {a.label && (
+                    ) : (
+                      <span
+                        className="absolute -top-6 flex items-center gap-1 pointer-events-none"
+                        style={
+                          a.box.x + a.box.w / 2 > 0.55
+                            ? { right: 0, flexDirection: "row-reverse" }
+                            : { left: 0 }
+                        }
+                      >
                         <span
-                          className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate`}
+                          className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow`}
                         >
-                          {a.label}
+                          {num}
                         </span>
-                      )}
-                    </span>
-                    {isSelected && !tapMode && !boxMode && (
+                        {a.label && (
+                          <span
+                            className={`${SEV_BG[sev]} ${SEV_TEXT[sev]} text-xs font-semibold px-1.5 py-0.5 rounded max-w-[60vw] truncate`}
+                          >
+                            {a.label}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {isSelected && !drawingMode && (
                       <>
                         {(["nw", "ne", "sw", "se"] as const).map((corner) => (
                           <div
@@ -1245,8 +1421,11 @@ function AnnotatePage() {
         {boxMode && !error && (
           <span className="text-yellow-400 font-medium">Drag a box around the problem</span>
         )}
-        {!tapMode && !boxMode && !selected && annotations.length > 0 && !error && (
-          <span className="text-neutral-500">Tap any box to edit its description</span>
+        {redactMode && !error && (
+          <span className="text-yellow-400 font-medium">Drag over anything to hide (faces, plates, IDs)</span>
+        )}
+        {!tapMode && !boxMode && !redactMode && !selected && annotations.length > 0 && !error && (
+          <span className="text-neutral-500">Tap any mark to edit it</span>
         )}
         {error && (
           <div role="alert" className="text-red-400 mt-1">
@@ -1260,20 +1439,67 @@ function AnnotatePage() {
         )}
       </div>
 
-      {/* Caption sheet (visible when a box is selected) */}
-      {selected ? (
+      {/* Edit sheet (visible when a mark is selected) */}
+      {selected && selectedIsRedaction ? (
+        <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900">
+          <div className="flex items-center gap-2">
+            <EyeOff className="h-4 w-4 text-neutral-400" />
+            <span className="text-xs uppercase tracking-wide text-neutral-500">Hidden area</span>
+            <button
+              onClick={deleteSelected}
+              className="ml-auto flex items-center gap-1 text-xs text-red-400 active:text-red-300"
+              aria-label="Delete redaction"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-neutral-500">
+            Painted over solid on the exported image. Drag it or its handles to adjust.
+          </p>
+          <button
+            onClick={deselect}
+            className="mt-3 w-full rounded-lg bg-yellow-400 py-2 text-sm font-semibold text-neutral-950 active:bg-yellow-300"
+          >
+            Done
+          </button>
+        </div>
+      ) : selected ? (
         <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs uppercase tracking-wide text-neutral-500">
               Describe the problem
             </span>
-            <button
-              onClick={deleteSelected}
-              className="ml-auto flex items-center gap-1 text-xs text-red-400 active:text-red-300"
-              aria-label="Delete tag"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Delete
-            </button>
+            <div className="ml-auto flex items-center gap-1">
+              {(["box", "ellipse"] as const).map((shape) => {
+                const active = selected && shapeOf(selected) === shape;
+                return (
+                  <button
+                    key={shape}
+                    onClick={() => setShape(shape)}
+                    aria-pressed={active}
+                    aria-label={shape === "box" ? "Box outline" : "Circle outline"}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md border ${
+                      active
+                        ? "border-yellow-300 bg-yellow-400 text-neutral-950"
+                        : "border-neutral-700 bg-neutral-800 text-neutral-400"
+                    }`}
+                  >
+                    {shape === "box" ? (
+                      <Square className="h-4 w-4" />
+                    ) : (
+                      <Circle className="h-4 w-4" />
+                    )}
+                  </button>
+                );
+              })}
+              <button
+                onClick={deleteSelected}
+                className="ml-1 flex items-center gap-1 text-xs text-red-400 active:text-red-300"
+                aria-label="Delete tag"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </button>
+            </div>
           </div>
           <div className="flex gap-1.5 mb-2">
             {(["info", "minor", "major"] as const).map((sev) => {
@@ -1295,6 +1521,17 @@ function AnnotatePage() {
                 </button>
               );
             })}
+          </div>
+          <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
+            {QUICK_LABELS.map((q) => (
+              <button
+                key={q}
+                onClick={() => insertQuickLabel(q)}
+                className="shrink-0 rounded-full border border-neutral-700 bg-neutral-800 px-2.5 py-1 text-xs text-neutral-300 active:bg-neutral-700"
+              >
+                {q}
+              </button>
+            ))}
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -1331,12 +1568,13 @@ function AnnotatePage() {
           </div>
         </div>
       ) : (
-        <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-5">
+        <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-6">
           <ModeButton
             active={tapMode}
             onClick={() => {
               setTapMode((v) => !v);
               setBoxMode(false);
+              setRedactMode(false);
               setSelectedId(null);
             }}
             icon={<Hand className="w-6 h-6" />}
@@ -1347,21 +1585,23 @@ function AnnotatePage() {
             onClick={() => {
               setBoxMode((v) => !v);
               setTapMode(false);
+              setRedactMode(false);
               setSelectedId(null);
             }}
             icon={<Square className="w-6 h-6" />}
             label={boxMode ? "Box on" : "Box"}
           />
-          <button
-            onClick={() => setError("AI auto-find is coming soon. Use Tap or Box for now.")}
-            className="flex flex-col items-center gap-1 text-xs text-neutral-500 active:text-neutral-300"
-            aria-label="AI auto-find coming soon"
-          >
-            <span className="w-14 h-14 rounded-full bg-neutral-900 flex items-center justify-center border border-neutral-800">
-              <Sparkles className="w-6 h-6 text-neutral-500" />
-            </span>
-            AI soon
-          </button>
+          <ModeButton
+            active={redactMode}
+            onClick={() => {
+              setRedactMode((v) => !v);
+              setTapMode(false);
+              setBoxMode(false);
+              setSelectedId(null);
+            }}
+            icon={<EyeOff className="w-6 h-6" />}
+            label={redactMode ? "Hide on" : "Hide"}
+          />
         </div>
       )}
       {appOverlays}
