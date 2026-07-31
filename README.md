@@ -54,6 +54,10 @@ App runs at `http://localhost:8080`. The core flow does not require AI services.
 
 ## Shipping to the Google Play Store
 
+> **Cutting a new release?** Once the one-time secrets are configured, publishing
+> is a single tag push via GitHub Actions — see [`docs/RELEASING.md`](docs/RELEASING.md).
+> The steps below cover the first-time Play Console + RevenueCat setup.
+
 There are **two services you need to set up** before publishing. Follow them in order.
 
 ### Step 1 — Google Play Console (the storefront)
