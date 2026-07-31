@@ -738,25 +738,29 @@ function AnnotatePage() {
   };
 
   const copyAsText = async () => {
+    setError(null);
     flushCaptionDraft();
-    // Read fresh annotations after flush via functional update
-    setAnnotations((curr) => {
-      const text = reportText(curr, {
-        title: reportDetails.title,
-        reference: reportDetails.reference,
-        timestamp: includeTimestamp && capturedAt ? formatStamp(capturedAt, useUTC) : undefined,
-      });
-      if (!text) return curr;
-      navigator.clipboard
-        ?.writeText(text)
-        .then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-          analytics.capture("annotation_list_copied", { tag_count: curr.length });
-        })
-        .catch(() => setError("Couldn't copy to clipboard."));
-      return curr;
+    // Fold any in-progress caption into the copied list (mirrors exportImage).
+    const list = selectedId
+      ? annotations.map((a) => (a.id === selectedId ? { ...a, label: captionDraft.trim() } : a))
+      : annotations;
+    const text = reportText(list, {
+      title: reportDetails.title,
+      reference: reportDetails.reference,
+      timestamp: includeTimestamp && capturedAt ? formatStamp(capturedAt, useUTC) : undefined,
     });
+    if (!text) {
+      setError("Nothing to copy yet — add a tag or a report title.");
+      return;
+    }
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      analytics.capture("annotation_list_copied", { tag_count: list.length });
+    } catch {
+      setError("Couldn't copy to clipboard.");
+    }
   };
 
   const startListening = () => {
