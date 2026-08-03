@@ -50,7 +50,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm install (not `npm ci`) so a package-lock.json that has drifted out
+        # of sync with package.json — the Lovable toolchain updates deps without
+        # always refreshing the lockfile — reconciles instead of hard-failing.
+        run: npm install --no-audit --no-fund
 
       - name: Build web bundle + sync Android
         run: npm run sync:android
