@@ -18,6 +18,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrderSuccessRouteImport } from './routes/order.success'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as LovableEmailQueueProcessRouteImport } from './routes/lovable/email/queue/process'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
@@ -66,6 +67,11 @@ const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
   path: '/api/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LovableEmailQueueProcessRoute =
   LovableEmailQueueProcessRouteImport.update({
     id: '/lovable/email/queue/process',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/wrapkit': typeof WrapkitRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/order/success': typeof OrderSuccessRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/wrapkit': typeof WrapkitRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/order/success': typeof OrderSuccessRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/wrapkit': typeof WrapkitRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/order/success': typeof OrderSuccessRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/queue/process': typeof LovableEmailQueueProcessRoute
 }
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
     | '/wrapkit'
     | '/api/feedback'
     | '/order/success'
+    | '/.lovable/oauth/consent'
     | '/api/public/payments/webhook'
     | '/lovable/email/queue/process'
   fileRoutesByTo: FileRoutesByTo
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/wrapkit'
     | '/api/feedback'
     | '/order/success'
+    | '/.lovable/oauth/consent'
     | '/api/public/payments/webhook'
     | '/lovable/email/queue/process'
   id:
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/wrapkit'
     | '/api/feedback'
     | '/order/success'
+    | '/.lovable/oauth/consent'
     | '/api/public/payments/webhook'
     | '/lovable/email/queue/process'
   fileRoutesById: FileRoutesById
@@ -171,6 +183,7 @@ export interface RootRouteChildren {
   WrapkitRoute: typeof WrapkitRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
   OrderSuccessRoute: typeof OrderSuccessRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   LovableEmailQueueProcessRoute: typeof LovableEmailQueueProcessRoute
 }
@@ -240,6 +253,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiFeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lovable/email/queue/process': {
       id: '/lovable/email/queue/process'
       path: '/lovable/email/queue/process'
@@ -267,6 +287,7 @@ const rootRouteChildren: RootRouteChildren = {
   WrapkitRoute: WrapkitRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
   OrderSuccessRoute: OrderSuccessRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   LovableEmailQueueProcessRoute: LovableEmailQueueProcessRoute,
 }
