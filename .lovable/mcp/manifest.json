@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://tyqsgdgdhqryeqhpzyhw.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "talk-tag",
+      "version": "0.1.0",
+      "title": "Talk & Tag"
+    },
+    "tools": [
+      {
+        "name": "list_orders",
+        "title": "List WrapKit orders",
+        "description": "List WrapKit Cloud app-build orders, newest first. Optionally filter by status. Requires an admin account.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Only return orders with this status.",
+              "type": "string",
+              "enum": [
+                "pending_payment",
+                "paid",
+                "in_progress",
+                "delivered",
+                "cancelled"
+              ]
+            },
+            "limit": {
+              "default": 20,
+              "description": "Maximum number of orders to return.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_order",
+        "title": "Get order details",
+        "description": "Get the full details of one WrapKit Cloud order by its id, including admin notes and delivery link. Requires an admin account.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "The order id."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_order",
+        "title": "Update an order",
+        "description": "Update a WrapKit Cloud order: set its status, admin notes, and/or the download link for the finished app bundle. Requires an admin account.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "The order id."
+            },
+            "status": {
+              "description": "New status for the order.",
+              "type": "string",
+              "enum": [
+                "pending_payment",
+                "paid",
+                "in_progress",
+                "delivered",
+                "cancelled"
+              ]
+            },
+            "admin_notes": {
+              "description": "Internal notes about this order.",
+              "type": "string",
+              "maxLength": 2000
+            },
+            "aab_download_url": {
+              "description": "Download link for the finished app bundle.",
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
