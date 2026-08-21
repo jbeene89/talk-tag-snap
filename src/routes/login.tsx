@@ -6,8 +6,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { claimAdminIfFirstUser } from "@/lib/orders.functions";
 
+function safeNext(next: unknown): string | null {
+  if (typeof next !== "string") return null;
+  if (!next.startsWith("/") || next.startsWith("//")) return null;
+  return next;
+}
+
 export const Route = createFileRoute("/login")({
   component: LoginPage,
+  validateSearch: (s: Record<string, unknown>) => ({ next: safeNext(s.next) ?? undefined }),
   head: () => ({
     meta: [
       { title: "Admin sign in — SoupyTag" },
@@ -27,6 +34,14 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
+  const afterAuth = () => {
+    if (next) {
+      window.location.href = next;
+      return;
+    }
+    navigate({ to: "/admin" });
+  };
   const claim = useServerFn(claimAdminIfFirstUser);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -45,7 +60,7 @@ function LoginPage() {
         const { error: e1 } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/admin` },
+          options: { emailRedirectTo: `${window.location.origin}${next ?? "/admin"}` },
         });
         if (e1) throw e1;
         // Try to sign in immediately (if email confirmation is off it just works).
@@ -55,12 +70,12 @@ function LoginPage() {
           return;
         }
         await claim();
-        navigate({ to: "/admin" });
+        afterAuth();
       } else {
         const { error: e1 } = await supabase.auth.signInWithPassword({ email, password });
         if (e1) throw e1;
         await claim();
-        navigate({ to: "/admin" });
+        afterAuth();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -86,7 +101,7 @@ function LoginPage() {
           onClick={async () => {
             setError(null);
             const result = await lovable.auth.signInWithOAuth("google", {
-              redirect_uri: `${window.location.origin}/admin`,
+              redirect_uri: `${window.location.origin}${next ?? "/admin"}`,
             });
             if (result.redirected) return;
             if (result.error) {
@@ -94,7 +109,7 @@ function LoginPage() {
               return;
             }
             await claim();
-            navigate({ to: "/admin" });
+            afterAuth();
           }}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
         >
