@@ -38,13 +38,14 @@ export function UnlockGate({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const run = async () => {
-      const { data } = await supabase.auth.getUser();
+      const { data } = await supabase.auth.getSession();
       if (cancelled) return;
-      if (!data.user) {
+      const user = data.session?.user;
+      if (!user) {
         setState("signed-out");
         return;
       }
-      setEmail(data.user.email ?? null);
+      setEmail(user.email ?? null);
 
       // Coming back from the payment page?
       const params = new URLSearchParams(window.location.search);
