@@ -49,9 +49,18 @@ import { loadPrefs, savePrefs, type ExportFormat } from "@/lib/prefs";
 import { requestNativeReview, saveImage, shareImage } from "@/lib/native";
 import { hasCompletedCurrentOnboarding } from "@/lib/onboarding";
 import { getSessionPersistenceAction } from "@/lib/session-persistence";
+import { UnlockGate } from "@/components/UnlockGate";
+
+function GatedAnnotatePage() {
+  return (
+    <UnlockGate>
+      <AnnotatePage />
+    </UnlockGate>
+  );
+}
 
 export const Route = createFileRoute("/")({
-  component: AnnotatePage,
+  component: GatedAnnotatePage,
   head: () => ({
     meta: [
       { title: "Tag Defects — Tap, Outline, Describe" },
