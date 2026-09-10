@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_unlocks: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          id: string
+          paid_at: string
+          stripe_session_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          id?: string
+          paid_at?: string
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          id?: string
+          paid_at?: string
+          stripe_session_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_send_log: {
         Row: {
           created_at: string
