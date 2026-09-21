@@ -21,9 +21,11 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
   },
   plugins: {
+    StatusBar: { style: "DARK" },
+    SystemBars: { style: "DARK" },
     SplashScreen: {
       launchShowDuration: 1500,
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0a0a0a',
       showSpinner: false,
     },
   },

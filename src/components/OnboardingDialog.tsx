@@ -55,8 +55,8 @@ export function OnboardingDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && finish(true)}>
-      <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-md overflow-hidden border-neutral-700 bg-neutral-950 p-0 text-neutral-100 shadow-2xl shadow-black sm:rounded-[2rem]">
-        <div className="relative min-h-[34rem] overflow-hidden px-6 pb-6 pt-8">
+      <DialogContent className="max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto border-neutral-700 bg-neutral-950 p-0 text-neutral-100 shadow-2xl shadow-black sm:rounded-[2rem]">
+        <div className="relative overflow-hidden px-6 pb-6 pt-8">
           <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-yellow-400/15 blur-3xl" />
           <div className="relative">
             <div className="flex gap-1" aria-label={`Step ${step + 1} of ${STEPS.length}`}>
@@ -78,7 +78,7 @@ export function OnboardingDialog({
               {current.body}
             </DialogDescription>
 
-            <div className="relative mt-8 flex h-52 items-center justify-center overflow-hidden rounded-[1.75rem] border border-neutral-800 bg-neutral-900">
+            <div className="relative mt-4 flex h-32 sm:h-52 items-center justify-center overflow-hidden rounded-[1.75rem] border border-neutral-800 bg-neutral-900">
               <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(250,204,21,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(250,204,21,.15)_1px,transparent_1px)] [background-size:24px_24px]" />
               <div className="relative flex h-28 w-28 items-center justify-center rounded-3xl border border-yellow-400/30 bg-yellow-400/10 shadow-[0_0_70px_rgba(250,204,21,.16)]">
                 <Icon className="h-12 w-12 text-yellow-400" strokeWidth={1.8} />
