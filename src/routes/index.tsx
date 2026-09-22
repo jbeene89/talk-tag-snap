@@ -45,6 +45,7 @@ import {
   shapeOf,
   tagSummary,
 } from "@/lib/annotations";
+import { loadImageFile } from "@/lib/image-import";
 import { loadPrefs, savePrefs, type ExportFormat } from "@/lib/prefs";
 import { requestNativeReview, saveImage, shareImage } from "@/lib/native";
 import { hasCompletedCurrentOnboarding } from "@/lib/onboarding";
@@ -63,13 +64,13 @@ export const Route = createFileRoute("/")({
   component: GatedAnnotatePage,
   head: () => ({
     meta: [
-      { title: "Tag Defects — Tap, Outline, Describe" },
+      { title: "Tag Defects â€” Tap, Outline, Describe" },
       {
         name: "description",
         content:
           "Snap a photo, tap or box the problem, describe it, and share a clear marked-up image.",
       },
-      { property: "og:title", content: "Tag Defects — Tap, Outline, Describe" },
+      { property: "og:title", content: "Tag Defects â€” Tap, Outline, Describe" },
       {
         property: "og:description",
         content:
@@ -160,6 +161,9 @@ function AnnotatePage() {
   });
 
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const fileLoadSequence = useRef(0);
+  const [loadingPhoto, setLoadingPhoto] = useState(false);
+  const [viewportSize, setViewportSize] = useState({ w: 1, h: 1 });
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [past, setPast] = useState<Annotation[][]>([]);
@@ -227,7 +231,7 @@ function AnnotatePage() {
     [haptics],
   );
 
-  // Speech recognition — dictates into the caption draft
+  // Speech recognition â€” dictates into the caption draft
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
@@ -318,7 +322,7 @@ function AnnotatePage() {
   const wasListeningRef = useRef(false);
   const autoAdvanceRef = useRef(false);
 
-  // Pinch gesture handlers — attached natively so we can preventDefault and beat the page-zoom behavior
+  // Pinch gesture handlers â€” attached natively so we can preventDefault and beat the page-zoom behavior
   useEffect(() => {
     const el = zoomViewportRef.current;
     if (!el) return;
@@ -371,33 +375,48 @@ function AnnotatePage() {
 
   const resetZoom = () => setZoom({ s: 1, x: 0, y: 0 });
 
-  const handleFile = (file: File, source: "camera" | "library" | "video" = "library") => {
-    setError(null);
-    setNotice(null);
-    setAnnotations([]);
-    setPast([]);
-    setFuture([]);
-    setSelectedId(null);
-    setCaptionDraft("");
-    setZoom({ s: 1, x: 0, y: 0 });
-    setCapturedAt(new Date());
+  // Reserve the workspace independently of the imported image's dimensions.
+  useEffect(() => {
+    const viewport = zoomViewportRef.current;
+    if (!viewport) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setViewportSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [imageDataUrl]);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = reader.result as string;
-      const img = new Image();
-      img.onload = () => {
-        setImageSize({ w: img.naturalWidth, h: img.naturalHeight });
-        setImageDataUrl(url);
-        analytics.capture("photo_loaded", {
-          source,
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-        });
-      };
-      img.src = url;
-    };
-    reader.readAsDataURL(file);
+  const handleFile = async (file: File, source: "camera" | "library" | "video" = "library") => {
+    const request = ++fileLoadSequence.current;
+    setLoadingPhoto(true);
+    setError(null);
+    try {
+      const image = await loadImageFile(file);
+      if (request !== fileLoadSequence.current) return;
+      setNotice(null);
+      setAnnotations([]);
+      setPast([]);
+      setFuture([]);
+      setSelectedId(null);
+      setCaptionDraft("");
+      setZoom({ s: 1, x: 0, y: 0 });
+      setCapturedAt(new Date());
+      setImageSize({ w: image.width, h: image.height });
+      setImageDataUrl(image.url);
+      analytics.capture("photo_loaded", { source, width: image.width, height: image.height });
+    } catch (error) {
+      if (request === fileLoadSequence.current) setError(error instanceof Error ? error.message : "This image could not be opened.");
+    } finally {
+      if (request === fileLoadSequence.current) setLoadingPhoto(false);
+    }
+  };
+
+  const openSample = async () => {
+    try {
+      const response = await fetch("/demo/sample-valve.jpg");
+      if (!response.ok) throw new Error("The practice photo could not be opened.");
+      await handleFile(new File([await response.blob()], "practice-valve.jpg", { type: "image/jpeg" }));
+    } catch { setError("The practice photo could not be opened. You can still choose your own photo."); }
   };
 
   // ---- History (undo/redo) ----
@@ -759,7 +778,7 @@ function AnnotatePage() {
       timestamp: includeTimestamp && capturedAt ? formatStamp(capturedAt, useUTC) : undefined,
     });
     if (!text) {
-      setError("Nothing to copy yet — add a tag or a report title.");
+      setError("Nothing to copy yet â€” add a tag or a report title.");
       return;
     }
     try {
@@ -913,8 +932,8 @@ function AnnotatePage() {
       const fit = (text: string) => {
         if (ctx.measureText(text).width <= maxTextW) return text;
         let t = text;
-        while (t.length > 1 && ctx.measureText(`${t}…`).width > maxTextW) t = t.slice(0, -1);
-        return `${t}…`;
+        while (t.length > 1 && ctx.measureText(`${t}â€¦`).width > maxTextW) t = t.slice(0, -1);
+        return `${t}â€¦`;
       };
       ctx.textBaseline = "top";
       ctx.fillStyle = "rgba(0,0,0,0.68)";
@@ -1030,7 +1049,7 @@ function AnnotatePage() {
   // ---------- Capture screen ----------
   if (!imageDataUrl) {
     return (
-      <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
+      <div className="capture-workspace flex flex-col bg-neutral-950 text-neutral-100">
         <header className="flex items-start justify-between gap-4 px-5 pb-4 pt-8">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Tag the problem.</h1>
@@ -1047,13 +1066,6 @@ function AnnotatePage() {
             <Settings className="h-5 w-5" />
           </button>
         </header>
-
-        <div className="mx-5 mb-2 rounded-xl bg-yellow-400/10 border border-yellow-400/30 px-4 py-3 text-sm text-yellow-300 flex items-center gap-3">
-          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.0161l.9347-3.7117 1.9906-.0042-.9393 3.7159h-2.986zm-9.9203.9956h2.986l-.9393-3.7159-1.9906.0042.9347 3.7117h.0002zm14.7458.6719c-.62-.1905-1.3085-.0288-1.7188.4048l-1.8006 1.8877H7.1162l-1.8006-1.8877c-.4103-.4336-1.0988-.5953-1.7188-.4048-1.2057.3702-2.068 1.4807-2.068 2.7928v7.0882c0 1.2048.9766 2.1814 2.1814 2.1814h15.5814c1.2048 0 2.1814-.9766 2.1814-2.1814v-7.0882c0-1.3121-.8623-2.4226-2.068-2.7928z"/>
-          </svg>
-          <span>Check out our new Android app — coming in a few days.</span>
-        </div>
 
         <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4">
           <button
@@ -1076,6 +1088,10 @@ function AnnotatePage() {
           >
             <VideoIcon className="w-5 h-5" />
             <span className="text-base font-medium">Pick frame from video</span>
+          </button>
+          <button type="button" onClick={openSample} disabled={loadingPhoto}
+            className="w-full max-w-xs min-h-12 rounded-2xl border border-yellow-400/40 px-4 py-3 text-sm font-semibold text-yellow-300 disabled:opacity-50">
+            Try a practice photo
           </button>
           <p className="text-xs text-neutral-500 mt-2 text-center max-w-xs">
             Take a new photo, upload one you already have, or scrub a video to grab any frame.
@@ -1132,6 +1148,7 @@ function AnnotatePage() {
             }}
           />
         )}
+        <p className="px-5 py-3 text-center text-sm text-yellow-300" role="status">{loadingPhoto ? "Opening photoâ€¦" : error}</p>
         {appOverlays}
       </div>
     );
@@ -1142,11 +1159,14 @@ function AnnotatePage() {
   const selectedIsRedaction = selected ? isRedaction(selected) : false;
   const defectNumberMap = defectNumbers(annotations);
   const drawingMode = tapMode || boxMode || redactMode;
+  const fitScale = imageSize ? Math.min(viewportSize.w / imageSize.w, viewportSize.h / imageSize.h) : 1;
+  const fittedImage = imageSize ? { width: imageSize.w * fitScale, height: imageSize.h * fitScale } : {};
+
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
+    <div className="annotation-workspace flex flex-col bg-neutral-950 text-neutral-100">
       <h1 className="sr-only">Tag defects in your photo</h1>
-      <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+      <header className="annotation-toolbar flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-neutral-800">
         <div className="flex items-center gap-2">
           <button
             onClick={reset}
@@ -1176,7 +1196,7 @@ function AnnotatePage() {
           </span>
           <span className="text-[10px] text-neutral-500">{tagSummary(annotations)}</span>
         </button>
-        <div className="flex gap-2">
+        <div className="annotation-actions flex flex-wrap gap-2">
           <button
             onClick={() => setSettingsOpen(true)}
             className="p-2 rounded-lg bg-neutral-800 active:bg-neutral-700"
@@ -1212,7 +1232,7 @@ function AnnotatePage() {
             aria-label={includeTimestamp ? "Timestamp on" : "Timestamp off"}
             title={
               capturedAt
-                ? `${includeTimestamp ? "On" : "Off"} — ${formatStamp(capturedAt, useUTC)} (${useUTC ? "UTC" : "Local"})`
+                ? `${includeTimestamp ? "On" : "Off"} â€” ${formatStamp(capturedAt, useUTC)} (${useUTC ? "UTC" : "Local"})`
                 : "Add timestamp to exported image and copied text"
             }
           >
@@ -1223,7 +1243,7 @@ function AnnotatePage() {
               onClick={() => setUseUTC((v) => !v)}
               className="p-2 rounded-lg bg-neutral-800 text-neutral-200 active:bg-neutral-700"
               aria-label={useUTC ? "Switch to local time" : "Switch to UTC"}
-              title={useUTC ? "UTC time — click for local" : "Local time — click for UTC"}
+              title={useUTC ? "UTC time â€” click for local" : "Local time â€” click for UTC"}
             >
               <Globe className="w-4 h-4" />
               <span className="sr-only">{useUTC ? "UTC" : "Local"}</span>
@@ -1263,11 +1283,13 @@ function AnnotatePage() {
 
       <div
         ref={zoomViewportRef}
-        className="relative flex-1 flex items-center justify-center bg-black overflow-hidden"
+        className="relative min-h-0 min-w-0 flex-1 flex items-center justify-center bg-black overflow-hidden"
         style={{ touchAction: zoom.s > 1 ? "none" : undefined }}
       >
         <div
           style={{
+            ...fittedImage,
+            flexShrink: 0,
             transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`,
             transformOrigin: "0 0",
             transition: pinchRef.current ? "none" : "transform 0.15s ease-out",
@@ -1289,13 +1311,13 @@ function AnnotatePage() {
               handlePointerUp();
               endBoxDrag();
             }}
-            className={`relative max-h-full max-w-full ${drawingMode ? "cursor-crosshair" : ""}`}
+            className={`relative h-full w-full ${drawingMode ? "cursor-crosshair" : ""}`}
             style={drawingMode ? { touchAction: "none" } : undefined}
           >
             <img
               src={imageDataUrl}
               alt="Photo being annotated for defect tagging"
-              className="block max-h-[calc(100vh-300px)] max-w-full object-contain select-none pointer-events-none"
+              className="block h-full w-full object-contain select-none pointer-events-none"
               draggable={false}
             />
             {drawingMode && (
@@ -1330,7 +1352,7 @@ function AnnotatePage() {
                     tabIndex={drawingMode ? -1 : 0}
                     aria-label={
                       redact
-                        ? "Redaction — hidden area"
+                        ? "Redaction â€” hidden area"
                         : `Tag ${num}: ${a.label || "No description"}. Severity ${sev}.`
                     }
                     className={`absolute ${
@@ -1448,9 +1470,10 @@ function AnnotatePage() {
         )}
       </div>
 
-      {/* Edit sheet (visible when a mark is selected) */}
+      <div className="annotation-controls">
+      {/* Edit sheet overlays the workspace without moving the image. */}
       {selected && selectedIsRedaction ? (
-        <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900">
+        <div className="annotation-sheet px-4 py-3 border-t border-neutral-800 bg-neutral-900">
           <div className="flex items-center gap-2">
             <EyeOff className="h-4 w-4 text-neutral-400" />
             <span className="text-xs uppercase tracking-wide text-neutral-500">Hidden area</span>
@@ -1473,7 +1496,7 @@ function AnnotatePage() {
           </button>
         </div>
       ) : selected ? (
-        <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900">
+        <div className="annotation-sheet px-4 py-3 border-t border-neutral-800 bg-neutral-900">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs uppercase tracking-wide text-neutral-500">
               Describe the problem
@@ -1613,6 +1636,7 @@ function AnnotatePage() {
           />
         </div>
       )}
+      </div>
       {appOverlays}
     </div>
   );

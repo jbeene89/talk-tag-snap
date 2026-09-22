@@ -1,0 +1,50 @@
+{
+  "app": "SoupyTag",
+  "capture": "Android emulator, actual running app, sample data; no patient or customer records",
+  "phone_dimensions": [
+    1080,
+    1920
+  ],
+  "feature_graphic_dimensions": [
+    1024,
+    500
+  ],
+  "screenshots": [
+    {
+      "file": "phone-01.png",
+      "raw": "raw\\01-markup.png",
+      "alt_text": "SoupyTag: Show the problem. Make it obvious. Mark a spot, add a note, share the detail.",
+      "sha256": "d25c7e7b567b94756b86d66c1e5002ddc4dd958ac8dc98f09a87077c0857ea20"
+    },
+    {
+      "file": "phone-02.png",
+      "raw": "raw\\02-detail.png",
+      "alt_text": "SoupyTag: Mark the spot. Add the detail. Clear notes and severity, in one place.",
+      "sha256": "c7d993656cff510b4e4c77d3cc526076464683953cfb519acd7e62fe36ebe81a"
+    },
+    {
+      "file": "phone-03.png",
+      "raw": "raw\\03-report.png",
+      "alt_text": "SoupyTag: Give every photo a clear reference. Add a title and reference to your export.",
+      "sha256": "daa0fb561bf456c0a4b84b4c4008454d1222615e867466a7af93cf831d2cc545"
+    },
+    {
+      "file": "phone-04.png",
+      "raw": "raw\\04-sample.png",
+      "alt_text": "SoupyTag: Get the hang of it. Then get to work. Try a bundled practice inspection.",
+      "sha256": "f54016ec9815cb2218695abb21f5bd31eeb33a34d58f3f1bb97b7d4a01314d32"
+    },
+    {
+      "file": "phone-05.png",
+      "raw": "raw\\05-settings.png",
+      "alt_text": "SoupyTag: Your workflow. Your settings. Guidance, support and privacy controls.",
+      "sha256": "17588fceb526cfc2bb3cf8e5a70eed69c03ba57a2caf618a536aaf5dabe5b5ce"
+    },
+    {
+      "file": "phone-06.png",
+      "raw": "raw\\06-guide.png",
+      "alt_text": "SoupyTag: Four steps. A clearer handoff. Capture. Locate. Explain. Send.",
+      "sha256": "ca4375b1d69768665b1bedb741e72c2e0f9d287fe839f963c7ac9398bb543dce"
+    }
+  ]
+}

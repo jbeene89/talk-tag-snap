@@ -1,0 +1,21 @@
+name: Store preview assets
+on:
+  pull_request:
+    paths:
+      - 'store-assets/2026-09-refresh/**'
+      - '.github/workflows/store-preview-assets.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SoupyTag-store-assets
+          path: store-assets/2026-09-refresh/
+          if-no-files-found: error
+          retention-days: 30

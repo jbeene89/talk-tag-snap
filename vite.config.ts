@@ -34,7 +34,8 @@ export default defineConfig({
   // needs the client build anyway.
   ...(mobileBuild ? { nitro: false as const } : {}),
   vite: {
-    plugins: [mcpPlugin()],
+    // The MCP server routes are web-only; skipping their generator also avoids Windows path normalization errors.
+    plugins: mobileBuild ? [] : [mcpPlugin()],
     ...(mobileBuild
       ? // Shell prerendering boots a vite preview server; bind it to IPv4 so it
         // also works in environments without IPv6.
