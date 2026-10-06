@@ -1,10 +1,8 @@
-SoupyTag 1.5.1 introduces Context Trail:
+SoupyTag 1.5.1 improves Context Trail:
 
-- Link wide-to-close photos with tappable highlights
-- Capture several nesting views from one video
-- Use breadcrumbs to return to the wider context
-- Keep descriptions with every view
-- Save editable trails or share an offline HTML viewer
-- Drafts save automatically on your device
+- Open your starting photo even if draft storage is unavailable
+- Save the latest edits reliably when changes arrive quickly
+- Keep keyboard focus inside the editor and restore it when you close
+- Reopen large offline HTML trails with long descriptions
 
-Your existing photo tagging and purchase are preserved.
+Keep linking wide-to-close photos, capturing video frames, returning through breadcrumbs, and sharing an offline viewer.
