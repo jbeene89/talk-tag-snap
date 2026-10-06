@@ -1,5 +1,8 @@
 # Releasing SoupyTag to Google Play
 
+> **Where do the keys live?** See [`CREDENTIALS.md`](CREDENTIALS.md) — the map of
+> every credential, where it is stored, and how to recover it.
+
 There are two ways to ship a build. Once the one-time setup below is done, **the
 GitHub Actions way is a single tag push** and everything else is automatic.
 
