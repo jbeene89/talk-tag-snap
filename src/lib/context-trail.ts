@@ -13,6 +13,8 @@ export type TrailLevel = {
 export type ContextTrail = { version: 1; title: string; levels: TrailLevel[] };
 export const MAX_TRAIL_LEVELS = 12;
 export const MAX_TRAIL_BYTES = 12 * 1024 * 1024;
+// HTML escapes metadata and includes its own offline viewer; data stays capped at 12 MiB.
+export const MAX_TRAIL_FILE_BYTES = MAX_TRAIL_BYTES + 256 * 1024;
 export const TRAIL_LABELS = ["Where", "What", "What part", "Exact problem"];
 
 export function levelLabel(index: number): string {
@@ -116,7 +118,7 @@ export function validateTrail(value: unknown): ContextTrail {
 }
 
 export function parseTrail(text: string): ContextTrail {
-  if (new TextEncoder().encode(text).byteLength > MAX_TRAIL_BYTES + 32_000)
+  if (new TextEncoder().encode(text).byteLength > MAX_TRAIL_FILE_BYTES)
     throw new Error("Choose a trail smaller than 12 MB.");
   // A shared HTML trail embeds the same portable JSON as a non-executable data block.
   const block = text.match(

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowLeft,
   ArrowRight,
@@ -18,7 +19,7 @@ import { loadImageFile } from "@/lib/image-import";
 import {
   canPreviewTrail,
   levelLabel,
-  MAX_TRAIL_BYTES,
+  MAX_TRAIL_FILE_BYTES,
   MAX_TRAIL_LEVELS,
   normalizedBox,
   parseTrail,
@@ -100,6 +101,9 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   const trailRef = useRef(trail);
   const importBusy = useRef(false);
   const initialRef = useRef({ image: initialImage, annotations: initialAnnotations });
+  const returnFocus = useRef<HTMLElement | null>(
+    typeof document === "undefined" ? null : (document.activeElement as HTMLElement),
+  );
   trailRef.current = trail;
   const current = trail.levels[active];
   const hasNext = active < trail.levels.length - 1;
@@ -109,8 +113,13 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      let saved: ContextTrail | null = null;
       try {
-        const saved = await loadTrailDraft();
+        saved = await loadTrailDraft();
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Could not open your draft.");
+      }
+      try {
         let next = saved ?? emptyTrail();
         if (!next.levels.length && initialRef.current.image) {
           const photo = await prepareImage(
@@ -209,7 +218,7 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
     setBusy(true);
     setError("");
     try {
-      if (file.size > MAX_TRAIL_BYTES + 32_000)
+      if (file.size > MAX_TRAIL_FILE_BYTES)
         throw new Error("Choose a trail file smaller than 12 MB.");
       const next = parseTrail(await file.text());
       // Retain the previous draft as a backup before replacing it with an imported file.
@@ -345,469 +354,498 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
 
   const box = draftBox ?? current?.hotspot;
   return (
-    <section className="trail-workspace" aria-label="Context Trail editor">
-      <header className="trail-header">
-        <button
-          className="trail-icon"
-          onClick={() => void close()}
-          disabled={busy}
-          aria-label="Close Context Trail"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div className="trail-heading">
-          <h1>Context Trail</h1>
-          <p>Show where. Follow the detail.</p>
-        </div>
-        <button
-          className="trail-button"
-          onClick={() => {
-            setPreview(!preview);
-            go(0);
+    <Dialog.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) void close();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Content
+          asChild
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocus.current?.focus();
           }}
-          disabled={!ready || busy}
         >
-          {preview ? "Edit trail" : "Preview"}
-        </button>
-      </header>
-      {!hydrated ? (
-        <div className="trail-empty">
-          <Loader2 className="animate-spin" /> Opening your trail…
-        </div>
-      ) : (
-        <>
-          <div className="trail-top">
-            <label className="trail-title">
-              <span>Trail title</span>
-              <input
-                aria-label="Trail title"
-                placeholder="e.g. Pump leak, south shed"
-                value={trail.title}
-                maxLength={160}
-                disabled={preview || busy}
-                onChange={(e) => setTrail({ ...trail, title: e.target.value })}
-              />
-            </label>
-            <nav className="trail-crumbs" aria-label="Context trail levels">
-              {trail.levels.map((level, i) => (
-                <button
-                  key={level.id}
-                  aria-current={i === active ? "step" : undefined}
-                  onClick={() => go(i)}
-                  disabled={busy}
-                >
-                  <span>{i + 1}</span>
-                  {level.title || levelLabel(i)}
-                  {i < trail.levels.length - 1 && !level.hotspot && (
-                    <span className="trail-link-needed" aria-label="Needs a link">
-                      ·
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
-          </div>
-          <div className="trail-body">
-            {!current ? (
+          <section className="trail-workspace" aria-label="Context Trail editor">
+            <header className="trail-header">
+              <button
+                className="trail-icon"
+                onClick={() => void close()}
+                disabled={busy}
+                aria-label="Close Context Trail"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <div className="trail-heading">
+                <Dialog.Title asChild>
+                  <h1>Context Trail</h1>
+                </Dialog.Title>
+                <Dialog.Description asChild>
+                  <p>Show where. Follow the detail.</p>
+                </Dialog.Description>
+              </div>
+              <button
+                className="trail-button"
+                onClick={() => {
+                  setPreview(!preview);
+                  go(0);
+                }}
+                disabled={!ready || busy}
+              >
+                {preview ? "Edit trail" : "Preview"}
+              </button>
+            </header>
+            {!hydrated ? (
               <div className="trail-empty">
-                <Layers size={48} strokeWidth={1.5} />
-                <h2>Start with the wider view.</h2>
-                <p>
-                  Then add closer photos of the same subject.
-                  <br />
-                  Link each view with a yellow highlight.
-                </p>
-                <button
-                  className="trail-button trail-primary"
-                  disabled={busy}
-                  onClick={() => photoInput.current?.click()}
-                >
-                  <ImagePlus size={18} /> Add photos, wide to close
-                </button>
-                <button
-                  className="trail-button"
-                  disabled={busy}
-                  onClick={() => importInput.current?.click()}
-                >
-                  Open a saved trail
-                </button>
+                <Loader2 className="animate-spin" /> Opening your trail…
               </div>
             ) : (
               <>
-                <div className="trail-image-area">
-                  <div
-                    ref={stage}
-                    className={`trail-stage ${boxing ? "trail-drawing" : ""}`}
-                    style={{
-                      aspectRatio: `${current.width}/${current.height}`,
-                      width: `min(100%, ${(52 * current.width) / current.height}dvh)`,
-                    }}
-                    onPointerDown={pointerDown}
-                    onPointerMove={pointerMove}
-                    onPointerUp={pointerUp}
-                    onPointerCancel={() => {
-                      start.current = null;
-                      setDraftBox(null);
-                    }}
-                  >
-                    <img
-                      src={current.image}
-                      alt={current.title || levelLabel(active)}
-                      draggable={false}
+                <div className="trail-top">
+                  <label className="trail-title">
+                    <span>Trail title</span>
+                    <input
+                      aria-label="Trail title"
+                      placeholder="e.g. Pump leak, south shed"
+                      value={trail.title}
+                      maxLength={160}
+                      disabled={preview || busy}
+                      onChange={(e) => setTrail({ ...trail, title: e.target.value })}
                     />
-                    {box && hasNext && (
+                  </label>
+                  <nav className="trail-crumbs" aria-label="Context trail levels">
+                    {trail.levels.map((level, i) => (
                       <button
-                        className={`trail-hotspot ${boxing ? "trail-inert" : ""}`}
-                        aria-label={`Open closer view: ${trail.levels[active + 1].title}`}
-                        style={{
-                          left: `${box.x * 100}%`,
-                          top: `${box.y * 100}%`,
-                          width: `${box.w * 100}%`,
-                          height: `${box.h * 100}%`,
-                        }}
-                        onClick={() => {
-                          if (!boxing) go(active + 1);
-                        }}
-                        tabIndex={boxing ? -1 : 0}
+                        key={level.id}
+                        aria-current={i === active ? "step" : undefined}
+                        onClick={() => go(i)}
+                        disabled={busy}
                       >
-                        <span>
-                          Open closer view <ArrowRight size={14} />
-                        </span>
+                        <span>{i + 1}</span>
+                        {level.title || levelLabel(i)}
+                        {i < trail.levels.length - 1 && !level.hotspot && (
+                          <span className="trail-link-needed" aria-label="Needs a link">
+                            ·
+                          </span>
+                        )}
                       </button>
-                    )}
-                  </div>
-                  <div className="trail-view-nav">
-                    <button
-                      className="trail-button"
-                      onClick={() => go(active - 1)}
-                      disabled={active === 0 || busy}
-                    >
-                      <ArrowLeft size={16} /> Wider
-                    </button>
-                    <span>
-                      {active + 1} / {trail.levels.length}
-                      {current.videoTime !== undefined &&
-                        ` · video ${current.videoTime.toFixed(1)}s`}
-                    </span>
-                    <button
-                      className="trail-button"
-                      onClick={() => go(active + 1)}
-                      disabled={!hasNext || busy}
-                    >
-                      Closer <ArrowRight size={16} />
-                    </button>
-                  </div>
+                    ))}
+                  </nav>
                 </div>
-                <aside className="trail-details">
-                  {preview ? (
-                    <>
-                      <h2>{current.title || levelLabel(active)}</h2>
-                      <p className="trail-note">{current.note || "No description added."}</p>
-                      <p className="trail-guidance">
-                        {hasNext
-                          ? "Tap the yellow highlight to open the closer view."
-                          : "The exact detail, with the wider context one tap away."}
+                <div className="trail-body">
+                  {!current ? (
+                    <div className="trail-empty">
+                      <Layers size={48} strokeWidth={1.5} />
+                      <h2>Start with the wider view.</h2>
+                      <p>
+                        Then add closer photos of the same subject.
+                        <br />
+                        Link each view with a yellow highlight.
                       </p>
                       <button
-                        className="trail-button"
-                        disabled={active === 0}
-                        onClick={() => go(0)}
+                        className="trail-button trail-primary"
+                        disabled={busy}
+                        onClick={() => photoInput.current?.click()}
                       >
-                        Back to the widest view
+                        <ImagePlus size={18} /> Add photos, wide to close
                       </button>
-                    </>
+                      <button
+                        className="trail-button"
+                        disabled={busy}
+                        onClick={() => importInput.current?.click()}
+                      >
+                        Open a saved trail
+                      </button>
+                    </div>
                   ) : (
                     <>
-                      <label>
-                        <span>View name</span>
-                        <input
-                          aria-label="View name"
-                          maxLength={160}
-                          value={current.title}
-                          disabled={busy}
-                          onChange={(e) => updateLevel({ title: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        <span>What should someone know?</span>
-                        <textarea
-                          aria-label="View description"
-                          maxLength={2000}
-                          placeholder="Describe the location, part, or problem…"
-                          value={current.note}
-                          disabled={busy}
-                          onChange={(e) => updateLevel({ note: e.target.value })}
-                        />
-                      </label>
-                      {hasNext ? (
-                        <div className="trail-link-panel">
-                          <p>
-                            Link to{" "}
-                            <strong>
-                              {trail.levels[active + 1].title || levelLabel(active + 1)}
-                            </strong>
-                          </p>
-                          <button
-                            className={`trail-button ${boxing ? "trail-primary" : ""}`}
-                            disabled={busy}
-                            aria-pressed={boxing}
-                            onClick={() => {
-                              setBoxing(!boxing);
-                              setDraftBox(null);
-                              setError("");
-                            }}
-                          >
-                            <Square size={17} />
-                            {boxing
-                              ? "Cancel drawing"
-                              : current.hotspot
-                                ? "Redraw link"
-                                : "Box the subject"}
-                          </button>
-                          <p className="trail-guidance">
-                            {boxing
-                              ? "Drag on the photo around the subject shown in the next view."
-                              : current.hotspot
-                                ? "Highlight linked. Tap it to try the closer view."
-                                : "Draw a box on this photo, or use the centered box and redraw it later."}
-                          </p>
-                          {!current.hotspot && !boxing && (
+                      <div className="trail-image-area">
+                        <div
+                          ref={stage}
+                          className={`trail-stage ${boxing ? "trail-drawing" : ""}`}
+                          style={{
+                            aspectRatio: `${current.width}/${current.height}`,
+                            width: `min(100%, ${(52 * current.width) / current.height}dvh)`,
+                          }}
+                          onPointerDown={pointerDown}
+                          onPointerMove={pointerMove}
+                          onPointerUp={pointerUp}
+                          onPointerCancel={() => {
+                            start.current = null;
+                            setDraftBox(null);
+                          }}
+                        >
+                          <img
+                            src={current.image}
+                            alt={current.title || levelLabel(active)}
+                            draggable={false}
+                          />
+                          {box && hasNext && (
                             <button
-                              className="trail-button"
-                              disabled={busy}
-                              onClick={() =>
-                                updateLevel({ hotspot: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 } })
-                              }
+                              className={`trail-hotspot ${boxing ? "trail-inert" : ""}`}
+                              aria-label={`Open closer view: ${trail.levels[active + 1].title}`}
+                              style={{
+                                left: `${box.x * 100}%`,
+                                top: `${box.y * 100}%`,
+                                width: `${box.w * 100}%`,
+                                height: `${box.h * 100}%`,
+                              }}
+                              onClick={() => {
+                                if (!boxing) go(active + 1);
+                              }}
+                              tabIndex={boxing ? -1 : 0}
                             >
-                              Use centered box
+                              <span>
+                                Open closer view <ArrowRight size={14} />
+                              </span>
                             </button>
                           )}
                         </div>
-                      ) : (
-                        <p className="trail-guidance">
-                          {trail.levels.length < 2
-                            ? "Add a closer view to link this photo."
-                            : "This is your closest detail. Add a photo to continue the trail."}
-                        </p>
-                      )}
+                        <div className="trail-view-nav">
+                          <button
+                            className="trail-button"
+                            onClick={() => go(active - 1)}
+                            disabled={active === 0 || busy}
+                          >
+                            <ArrowLeft size={16} /> Wider
+                          </button>
+                          <span>
+                            {active + 1} / {trail.levels.length}
+                            {current.videoTime !== undefined &&
+                              ` · video ${current.videoTime.toFixed(1)}s`}
+                          </span>
+                          <button
+                            className="trail-button"
+                            onClick={() => go(active + 1)}
+                            disabled={!hasNext || busy}
+                          >
+                            Closer <ArrowRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <aside className="trail-details">
+                        {preview ? (
+                          <>
+                            <h2>{current.title || levelLabel(active)}</h2>
+                            <p className="trail-note">{current.note || "No description added."}</p>
+                            <p className="trail-guidance">
+                              {hasNext
+                                ? "Tap the yellow highlight to open the closer view."
+                                : "The exact detail, with the wider context one tap away."}
+                            </p>
+                            <button
+                              className="trail-button"
+                              disabled={active === 0}
+                              onClick={() => go(0)}
+                            >
+                              Back to the widest view
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <label>
+                              <span>View name</span>
+                              <input
+                                aria-label="View name"
+                                maxLength={160}
+                                value={current.title}
+                                disabled={busy}
+                                onChange={(e) => updateLevel({ title: e.target.value })}
+                              />
+                            </label>
+                            <label>
+                              <span>What should someone know?</span>
+                              <textarea
+                                aria-label="View description"
+                                maxLength={2000}
+                                placeholder="Describe the location, part, or problem…"
+                                value={current.note}
+                                disabled={busy}
+                                onChange={(e) => updateLevel({ note: e.target.value })}
+                              />
+                            </label>
+                            {hasNext ? (
+                              <div className="trail-link-panel">
+                                <p>
+                                  Link to{" "}
+                                  <strong>
+                                    {trail.levels[active + 1].title || levelLabel(active + 1)}
+                                  </strong>
+                                </p>
+                                <button
+                                  className={`trail-button ${boxing ? "trail-primary" : ""}`}
+                                  disabled={busy}
+                                  aria-pressed={boxing}
+                                  onClick={() => {
+                                    setBoxing(!boxing);
+                                    setDraftBox(null);
+                                    setError("");
+                                  }}
+                                >
+                                  <Square size={17} />
+                                  {boxing
+                                    ? "Cancel drawing"
+                                    : current.hotspot
+                                      ? "Redraw link"
+                                      : "Box the subject"}
+                                </button>
+                                <p className="trail-guidance">
+                                  {boxing
+                                    ? "Drag on the photo around the subject shown in the next view."
+                                    : current.hotspot
+                                      ? "Highlight linked. Tap it to try the closer view."
+                                      : "Draw a box on this photo, or use the centered box and redraw it later."}
+                                </p>
+                                {!current.hotspot && !boxing && (
+                                  <button
+                                    className="trail-button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      updateLevel({ hotspot: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 } })
+                                    }
+                                  >
+                                    Use centered box
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="trail-guidance">
+                                {trail.levels.length < 2
+                                  ? "Add a closer view to link this photo."
+                                  : "This is your closest detail. Add a photo to continue the trail."}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </aside>
                     </>
                   )}
-                </aside>
+                </div>
+                {!preview && (
+                  <div className="trail-capture" aria-label="Add a trail view">
+                    <button
+                      className="trail-button"
+                      disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
+                      onClick={() => cameraInput.current?.click()}
+                    >
+                      <Camera size={17} /> Take photo
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
+                      onClick={() => photoInput.current?.click()}
+                    >
+                      <ImagePlus size={17} /> Add photos
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
+                      onClick={() => {
+                        if (video) setVideoPicker(true);
+                        else videoInput.current?.click();
+                      }}
+                    >
+                      <Video size={17} />
+                      {video ? "More video frames" : "Video frames"}
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
+                      onClick={() => recordInput.current?.click()}
+                    >
+                      Record video
+                    </button>
+                  </div>
+                )}
+                <footer className="trail-footer">
+                  <div className="trail-save-status" role="status">
+                    {busy ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> Working…
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} /> {status}
+                      </>
+                    )}
+                    {trail.levels.length > 1 && (
+                      <span>
+                        {completeLinks} / {trail.levels.length - 1} views linked
+                      </span>
+                    )}
+                  </div>
+                  {error && (
+                    <p className="trail-error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  <div className="trail-actions">
+                    <button
+                      className="trail-button"
+                      disabled={busy || !trail.levels.length}
+                      onClick={() => void saveOrShare("draft")}
+                    >
+                      <Download size={16} /> Save trail
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy || !ready}
+                      onClick={() => void saveOrShare("viewer")}
+                    >
+                      Save viewer
+                    </button>
+                    <button
+                      className="trail-button trail-primary"
+                      disabled={busy || !ready}
+                      onClick={() => void saveOrShare("share")}
+                    >
+                      <Share2 size={17} /> Share trail
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy}
+                      onClick={() => importInput.current?.click()}
+                    >
+                      Open trail
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy}
+                      onClick={() => setNewPrompt(true)}
+                    >
+                      New trail
+                    </button>
+                  </div>
+                </footer>
               </>
             )}
-          </div>
-          {!preview && (
-            <div className="trail-capture" aria-label="Add a trail view">
-              <button
-                className="trail-button"
-                disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
-                onClick={() => cameraInput.current?.click()}
-              >
-                <Camera size={17} /> Take photo
-              </button>
-              <button
-                className="trail-button"
-                disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
-                onClick={() => photoInput.current?.click()}
-              >
-                <ImagePlus size={17} /> Add photos
-              </button>
-              <button
-                className="trail-button"
-                disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
-                onClick={() => {
-                  if (video) setVideoPicker(true);
-                  else videoInput.current?.click();
+            <input
+              ref={photoInput}
+              aria-label="Add trail photos"
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                void addFiles(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={cameraInput}
+              aria-label="Take trail photo"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(e) => {
+                void addFiles(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={videoInput}
+              aria-label="Choose trail video"
+              type="file"
+              accept="video/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setVideo(f);
+                  setVideoAt(0);
+                  setVideoPicked(0);
+                  setVideoPicker(true);
+                }
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={recordInput}
+              aria-label="Record trail video"
+              type="file"
+              accept="video/*"
+              capture="environment"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setVideo(f);
+                  setVideoAt(0);
+                  setVideoPicked(0);
+                  setVideoPicker(true);
+                }
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={importInput}
+              aria-label="Open Context Trail file"
+              type="file"
+              accept=".json,.html,application/json,text/html"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void openFile(f);
+                e.target.value = "";
+              }}
+            />
+            {video && videoPicker && (
+              <VideoFramePicker
+                videoFile={video}
+                initialTime={videoAt}
+                onCancel={() => setVideoPicker(false)}
+                onPickFrame={(file, at) => {
+                  setVideoAt(at);
+                  return addFiles([file], at);
                 }}
-              >
-                <Video size={17} />
-                {video ? "More video frames" : "Video frames"}
-              </button>
-              <button
-                className="trail-button"
-                disabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
-                onClick={() => recordInput.current?.click()}
-              >
-                Record video
-              </button>
-            </div>
-          )}
-          <footer className="trail-footer">
-            <div className="trail-save-status" role="status">
-              {busy ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> Working…
-                </>
-              ) : (
-                <>
-                  <Check size={14} /> {status}
-                </>
-              )}
-              {trail.levels.length > 1 && (
-                <span>
-                  {completeLinks} / {trail.levels.length - 1} views linked
-                </span>
-              )}
-            </div>
-            {error && (
-              <p className="trail-error" role="alert">
-                {error}
-              </p>
+                continuous
+                pickedCount={videoPicked}
+                captureDisabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
+                onDone={() => {
+                  setVideoPicker(false);
+                  setActive(0);
+                }}
+                feedback={
+                  error ||
+                  (videoPicked
+                    ? `${videoPicked} frame${videoPicked === 1 ? "" : "s"} added. Scrub closer and capture the next view.`
+                    : "Start wide, then capture the closer views in order.")
+                }
+              />
             )}
-            <div className="trail-actions">
-              <button
-                className="trail-button"
-                disabled={busy || !trail.levels.length}
-                onClick={() => void saveOrShare("draft")}
+            {newPrompt && (
+              <div
+                className="trail-confirm"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Start a new trail"
               >
-                <Download size={16} /> Save trail
-              </button>
-              <button
-                className="trail-button"
-                disabled={busy || !ready}
-                onClick={() => void saveOrShare("viewer")}
-              >
-                Save viewer
-              </button>
-              <button
-                className="trail-button trail-primary"
-                disabled={busy || !ready}
-                onClick={() => void saveOrShare("share")}
-              >
-                <Share2 size={17} /> Share trail
-              </button>
-              <button
-                className="trail-button"
-                disabled={busy}
-                onClick={() => importInput.current?.click()}
-              >
-                Open trail
-              </button>
-              <button className="trail-button" disabled={busy} onClick={() => setNewPrompt(true)}>
-                New trail
-              </button>
-            </div>
-          </footer>
-        </>
-      )}
-      <input
-        ref={photoInput}
-        aria-label="Add trail photos"
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          void addFiles(Array.from(e.target.files ?? []));
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={cameraInput}
-        aria-label="Take trail photo"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        hidden
-        onChange={(e) => {
-          void addFiles(Array.from(e.target.files ?? []));
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={videoInput}
-        aria-label="Choose trail video"
-        type="file"
-        accept="video/*"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) {
-            setVideo(f);
-            setVideoAt(0);
-            setVideoPicked(0);
-            setVideoPicker(true);
-          }
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={recordInput}
-        aria-label="Record trail video"
-        type="file"
-        accept="video/*"
-        capture="environment"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) {
-            setVideo(f);
-            setVideoAt(0);
-            setVideoPicked(0);
-            setVideoPicker(true);
-          }
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={importInput}
-        aria-label="Open Context Trail file"
-        type="file"
-        accept=".json,.html,application/json,text/html"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void openFile(f);
-          e.target.value = "";
-        }}
-      />
-      {video && videoPicker && (
-        <VideoFramePicker
-          videoFile={video}
-          initialTime={videoAt}
-          onCancel={() => setVideoPicker(false)}
-          onPickFrame={(file, at) => {
-            setVideoAt(at);
-            return addFiles([file], at);
-          }}
-          continuous
-          pickedCount={videoPicked}
-          captureDisabled={busy || trail.levels.length >= MAX_TRAIL_LEVELS}
-          onDone={() => {
-            setVideoPicker(false);
-            setActive(0);
-          }}
-          feedback={
-            error ||
-            (videoPicked
-              ? `${videoPicked} frame${videoPicked === 1 ? "" : "s"} added. Scrub closer and capture the next view.`
-              : "Start wide, then capture the closer views in order.")
-          }
-        />
-      )}
-      {newPrompt && (
-        <div
-          className="trail-confirm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Start a new trail"
-        >
-          <div>
-            <h2>Keep this trail before starting another.</h2>
-            <p>Your current trail will be saved as a backup file.</p>
-            <button
-              className="trail-button trail-primary"
-              disabled={busy}
-              onClick={() => void newTrail()}
-            >
-              Save backup and start new
-            </button>
-            <button className="trail-button" disabled={busy} onClick={() => setNewPrompt(false)}>
-              <X size={16} /> Keep editing
-            </button>
-          </div>
-        </div>
-      )}
-    </section>
+                <div>
+                  <h2>Keep this trail before starting another.</h2>
+                  <p>Your current trail will be saved as a backup file.</p>
+                  <button
+                    className="trail-button trail-primary"
+                    disabled={busy}
+                    onClick={() => void newTrail()}
+                  >
+                    Save backup and start new
+                  </button>
+                  <button
+                    className="trail-button"
+                    disabled={busy}
+                    onClick={() => setNewPrompt(false)}
+                  >
+                    <X size={16} /> Keep editing
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

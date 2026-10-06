@@ -7,6 +7,8 @@ import {
   trailHtml,
   canPreviewTrail,
   MAX_TRAIL_LEVELS,
+  MAX_TRAIL_BYTES,
+  MAX_TRAIL_FILE_BYTES,
   type ContextTrail,
 } from "./context-trail.ts";
 const fixture = (): ContextTrail => ({
@@ -96,4 +98,23 @@ test("drafts can contain unlinked levels; viewer exports are offline and have no
   const html = trailHtml(t);
   assert.ok(html.includes("connect-src 'none'"));
   assert.ok(!html.includes('src="https://'));
+});
+
+test("a near-limit trail reopens its own HTML with heavily escaped metadata", () => {
+  const t = fixture();
+  t.title = "<".repeat(160);
+  t.levels = Array.from({ length: MAX_TRAIL_LEVELS }, (_, i) => ({
+    ...t.levels[0],
+    id: `level-${i}`,
+    title: "<".repeat(160),
+    note: "&".repeat(2000),
+  }));
+  const bytes = new TextEncoder().encode(JSON.stringify(t)).byteLength;
+  t.levels[0].image += "A".repeat(Math.floor((MAX_TRAIL_BYTES - bytes - 1024) / 4) * 4);
+  validateTrail(t);
+  const html = trailHtml(t);
+  const fileBytes = new TextEncoder().encode(html).byteLength;
+  assert.ok(fileBytes > MAX_TRAIL_BYTES + 32_000);
+  assert.ok(fileBytes < MAX_TRAIL_FILE_BYTES);
+  assert.deepEqual(parseTrail(html), t);
 });
