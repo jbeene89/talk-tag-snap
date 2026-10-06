@@ -16,6 +16,7 @@ Snap a photo (or grab a frame from a video), mark the exact problem, describe it
 - **Edit** labels, remove tags, undo.
 - **Export** the annotated photo (JPG or lossless PNG) to your camera roll or share sheet (Teams, email, SMS, etc.).
 - **Works offline** — since 1.3.0 the Android app packages the web bundle inside the APK, so capture, tagging, and export work with no signal.
+- **Context Trail** — link wide-to-close photos with tappable highlights, or keep several frames from one video. Breadcrumbs take you back to the wider context. Drafts stay on the device; export an editable trail or an HTML viewer with all photos included. See [Context Trail](docs/CONTEXT_TRAIL.md).
 
 ## Tech
 

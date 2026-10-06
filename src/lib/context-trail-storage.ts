@@ -1,0 +1,44 @@
+import { validateTrail, type ContextTrail } from "./context-trail";
+
+function database(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("soupytag-context-trails", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("drafts");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(new Error("Draft storage is unavailable. Save a trail file to keep your work."));
+  });
+}
+async function transaction(mode: IDBTransactionMode, value?: ContextTrail): Promise<unknown> {
+  const db = await database();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction("drafts", mode);
+      const store = tx.objectStore("drafts");
+      const request = mode === "readonly" ? store.get("current") : store.put(value, "current");
+      tx.oncomplete = () => resolve(request.result);
+      tx.onerror = () =>
+        reject(new Error("Could not save this draft. Save a trail file before closing."));
+      tx.onabort = () =>
+        reject(new Error("Draft storage is full. Save a trail file before closing."));
+    });
+  } finally {
+    db.close();
+  }
+}
+let pendingWrite: Promise<void> = Promise.resolve();
+
+export async function loadTrailDraft(): Promise<ContextTrail | null> {
+  await pendingWrite;
+  const value = await transaction("readonly");
+  return value ? validateTrail(value) : null;
+}
+export async function saveTrailDraft(trail: ContextTrail): Promise<void> {
+  const snapshot = validateTrail(trail);
+  const write = pendingWrite.then(async () => {
+    await transaction("readwrite", snapshot);
+  });
+  // Preserve the order of edits without letting a failed write block later saves.
+  pendingWrite = write.catch(() => {});
+  await write;
+}

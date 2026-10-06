@@ -6,7 +6,12 @@ type Props = {
   videoFile: File;
   initialTime?: number;
   onCancel: () => void;
-  onPickFrame: (frameFile: File, atTime: number) => void;
+  onPickFrame: (frameFile: File, atTime: number) => void | Promise<void>;
+  continuous?: boolean;
+  pickedCount?: number;
+  captureDisabled?: boolean;
+  onDone?: () => void;
+  feedback?: string;
 };
 
 function formatTime(seconds: number): string {
@@ -21,7 +26,17 @@ function formatTime(seconds: number): string {
  * That frame is handed back to the parent as a JPEG File, which then flows
  * into the normal photo-tagging pipeline.
  */
-export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickFrame }: Props) {
+export function VideoFramePicker({
+  videoFile,
+  initialTime = 0,
+  onCancel,
+  onPickFrame,
+  continuous = false,
+  pickedCount = 0,
+  captureDisabled = false,
+  onDone,
+  feedback,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [duration, setDuration] = useState(0);
@@ -45,7 +60,7 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
     // Nudge currentTime so iOS/Android actually paints the first frame
     // instead of showing a black box until the user scrubs.
     try {
-      const start = initialTime > 0 ? Math.min(initialTime, (v.duration || initialTime)) : 0.001;
+      const start = initialTime > 0 ? Math.min(initialTime, v.duration || initialTime) : 0.001;
       v.currentTime = start;
       setCurrent(start);
     } catch {
@@ -75,17 +90,22 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
     setError(null);
     try {
       // Wait for the seek to settle so we actually capture the displayed frame.
-      await new Promise<void>((resolve) => {
-        if (v.readyState >= 2) {
+      v.pause();
+      await new Promise<void>((resolve, reject) => {
+        if (!v.seeking && v.readyState >= 2) {
           resolve();
           return;
         }
         const onSeeked = () => {
+          clearTimeout(timeout);
           v.removeEventListener("seeked", onSeeked);
           resolve();
         };
+        const timeout = setTimeout(() => {
+          v.removeEventListener("seeked", onSeeked);
+          reject(new Error("The video is still loading. Wait a moment and capture again."));
+        }, 5000);
         v.addEventListener("seeked", onSeeked);
-        setTimeout(resolve, 400);
       });
 
       const w = v.videoWidth;
@@ -113,34 +133,54 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
         return;
       }
       const file = new File([blob], `frame-${Date.now()}.jpg`, { type: "image/jpeg" });
-      onPickFrame(file, v.currentTime || 0);
+      await onPickFrame(file, v.currentTime || 0);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong reading the video.");
+      setError(err instanceof Error ? err.message : "Something went wrong reading the video.");
+    } finally {
       setGrabbing(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950 text-neutral-100 flex flex-col">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
+    <div
+      className="fixed inset-0 z-50 bg-neutral-950 text-neutral-100 flex flex-col"
+      style={{
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
+    >
+      <header className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 shrink-0">
         <button
           onClick={onCancel}
+          disabled={grabbing || captureDisabled}
           className="flex items-center gap-1.5 text-sm text-neutral-300 active:text-white"
           aria-label="Cancel"
         >
           <X className="w-4 h-4" /> Cancel
         </button>
-        <span className="text-sm font-medium text-neutral-400">Pick a frame to tag</span>
-        <span className="w-12" />
+        <span className="text-sm font-medium text-neutral-400">
+          {continuous ? `Context Trail · ${pickedCount} frames` : "Pick a frame to tag"}
+        </span>
+        {continuous ? (
+          <button
+            className="min-h-11 px-3 font-semibold text-yellow-400 disabled:opacity-40"
+            onClick={onDone}
+            disabled={grabbing}
+          >
+            Done
+          </button>
+        ) : (
+          <span className="w-12" />
+        )}
       </header>
 
-      <div className="flex-1 flex items-center justify-center bg-black overflow-hidden">
+      <div className="flex-1 min-h-0 flex items-center justify-center bg-black overflow-hidden">
         <video
           ref={videoRef}
           src={videoUrl}
           onLoadedMetadata={handleLoaded}
-          onLoadedData={handleLoaded}
+          onLoadedData={() => setReady(true)}
           onTimeUpdate={(e) => setCurrent((e.target as HTMLVideoElement).currentTime)}
           playsInline
           muted
@@ -151,7 +191,7 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
-      <div className="px-4 pt-3 pb-5 border-t border-neutral-800 bg-neutral-950 space-y-3">
+      <div className="shrink-0 px-4 pt-3 pb-5 border-t border-neutral-800 bg-neutral-950 space-y-3">
         <div className="flex items-center gap-3 text-xs text-neutral-400 font-mono">
           <span>{formatTime(current)}</span>
           <input
@@ -200,10 +240,15 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
         </div>
 
         {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+        {continuous && feedback && (
+          <p className="text-xs text-yellow-300 text-center" role="status">
+            {feedback}
+          </p>
+        )}
 
         <Button
           onClick={handleGrabFrame}
-          disabled={!ready || grabbing}
+          disabled={!ready || grabbing || captureDisabled}
           className="w-full h-12 bg-yellow-400 text-neutral-950 hover:bg-yellow-300 text-base font-semibold"
         >
           {grabbing ? (
@@ -212,7 +257,7 @@ export function VideoFramePicker({ videoFile, initialTime = 0, onCancel, onPickF
             </>
           ) : (
             <>
-              <Camera className="w-5 h-5" /> Use this frame
+              <Camera className="w-5 h-5" /> {continuous ? "Add frame to trail" : "Use this frame"}
             </>
           )}
         </Button>

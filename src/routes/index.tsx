@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
   Mic,
@@ -22,6 +22,7 @@ import {
   Clock,
   Globe,
   Settings,
+  Layers,
 } from "lucide-react";
 
 import { OnboardingDialog } from "@/components/OnboardingDialog";
@@ -51,6 +52,12 @@ import { requestNativeReview, saveImage, shareImage } from "@/lib/native";
 import { hasCompletedCurrentOnboarding } from "@/lib/onboarding";
 import { getSessionPersistenceAction } from "@/lib/session-persistence";
 import { UnlockGate } from "@/components/UnlockGate";
+
+const ContextTrailEditor = lazy(() =>
+  import("@/components/ContextTrailEditor").then((module) => ({
+    default: module.ContextTrailEditor,
+  })),
+);
 
 function GatedAnnotatePage() {
   return (
@@ -148,6 +155,7 @@ function AnnotatePage() {
   const analytics = useAnalytics();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [trailOpen, setTrailOpen] = useState(false);
 
   const [tapMode, setTapMode] = useState(false);
   const [boxMode, setBoxMode] = useState(false);
@@ -405,7 +413,8 @@ function AnnotatePage() {
       setImageDataUrl(image.url);
       analytics.capture("photo_loaded", { source, width: image.width, height: image.height });
     } catch (error) {
-      if (request === fileLoadSequence.current) setError(error instanceof Error ? error.message : "This image could not be opened.");
+      if (request === fileLoadSequence.current)
+        setError(error instanceof Error ? error.message : "This image could not be opened.");
     } finally {
       if (request === fileLoadSequence.current) setLoadingPhoto(false);
     }
@@ -415,8 +424,12 @@ function AnnotatePage() {
     try {
       const response = await fetch("/demo/sample-valve.jpg");
       if (!response.ok) throw new Error("The practice photo could not be opened.");
-      await handleFile(new File([await response.blob()], "practice-valve.jpg", { type: "image/jpeg" }));
-    } catch { setError("The practice photo could not be opened. You can still choose your own photo."); }
+      await handleFile(
+        new File([await response.blob()], "practice-valve.jpg", { type: "image/jpeg" }),
+      );
+    } catch {
+      setError("The practice photo could not be opened. You can still choose your own photo.");
+    }
   };
 
   // ---- History (undo/redo) ----
@@ -530,7 +543,8 @@ function AnnotatePage() {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if ((!boxMode && !redactMode) || !drawingRef.current.active || !drawingRef.current.start) return;
+    if ((!boxMode && !redactMode) || !drawingRef.current.active || !drawingRef.current.start)
+      return;
     const p = getPointerPos(e);
     setDrawing({
       x1: drawingRef.current.start.x,
@@ -541,7 +555,8 @@ function AnnotatePage() {
   };
 
   const handlePointerUp = () => {
-    if ((!boxMode && !redactMode) || !drawingRef.current.active || !drawingRef.current.start) return;
+    if ((!boxMode && !redactMode) || !drawingRef.current.active || !drawingRef.current.start)
+      return;
     const wasRedact = redactMode;
     drawingRef.current = { active: false, start: null };
     const d = drawing;
@@ -899,7 +914,15 @@ function AnnotatePage() {
       ctx.strokeStyle = color;
       if (shapeOf(a) === "ellipse") {
         ctx.beginPath();
-        ctx.ellipse(x + w / 2, y + h / 2, Math.max(1, w / 2), Math.max(1, h / 2), 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          x + w / 2,
+          y + h / 2,
+          Math.max(1, w / 2),
+          Math.max(1, h / 2),
+          0,
+          0,
+          Math.PI * 2,
+        );
         ctx.stroke();
       } else {
         ctx.strokeRect(x, y, w, h);
@@ -1022,6 +1045,21 @@ function AnnotatePage() {
 
   const appOverlays = (
     <>
+      {trailOpen && (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-40 grid place-items-center bg-neutral-950 text-yellow-300">
+              Opening Context Trail…
+            </div>
+          }
+        >
+          <ContextTrailEditor
+            onClose={() => setTrailOpen(false)}
+            initialImage={imageDataUrl}
+            initialAnnotations={annotations}
+          />
+        </Suspense>
+      )}
       <OnboardingDialog open={onboardingOpen} onOpenChange={setOnboardingOpen} />
       <SettingsDialog
         open={settingsOpen}
@@ -1089,9 +1127,26 @@ function AnnotatePage() {
             <VideoIcon className="w-5 h-5" />
             <span className="text-base font-medium">Pick frame from video</span>
           </button>
-          <button type="button" onClick={openSample} disabled={loadingPhoto}
-            className="w-full max-w-xs min-h-12 rounded-2xl border border-yellow-400/40 px-4 py-3 text-sm font-semibold text-yellow-300 disabled:opacity-50">
+          <button
+            type="button"
+            onClick={openSample}
+            disabled={loadingPhoto}
+            className="w-full max-w-xs min-h-12 rounded-2xl border border-yellow-400/40 px-4 py-3 text-sm font-semibold text-yellow-300 disabled:opacity-50"
+          >
             Try a practice photo
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrailOpen(true)}
+            className="w-full max-w-xs min-h-14 rounded-2xl border border-yellow-400/50 bg-neutral-900 px-4 py-3 text-yellow-300 flex items-center justify-center gap-3"
+          >
+            <Layers className="h-5 w-5" />
+            <span className="text-left">
+              <span className="block font-semibold">Context Trail</span>
+              <span className="block text-xs text-neutral-400">
+                Wide view → part → exact problem
+              </span>
+            </span>
           </button>
           <p className="text-xs text-neutral-500 mt-2 text-center max-w-xs">
             Take a new photo, upload one you already have, or scrub a video to grab any frame.
@@ -1148,7 +1203,9 @@ function AnnotatePage() {
             }}
           />
         )}
-        <p className="px-5 py-3 text-center text-sm text-yellow-300" role="status">{loadingPhoto ? "Opening photoâ€¦" : error}</p>
+        <p className="px-5 py-3 text-center text-sm text-yellow-300" role="status">
+          {loadingPhoto ? "Opening photoâ€¦" : error}
+        </p>
         {appOverlays}
       </div>
     );
@@ -1159,9 +1216,12 @@ function AnnotatePage() {
   const selectedIsRedaction = selected ? isRedaction(selected) : false;
   const defectNumberMap = defectNumbers(annotations);
   const drawingMode = tapMode || boxMode || redactMode;
-  const fitScale = imageSize ? Math.min(viewportSize.w / imageSize.w, viewportSize.h / imageSize.h) : 1;
-  const fittedImage = imageSize ? { width: imageSize.w * fitScale, height: imageSize.h * fitScale } : {};
-
+  const fitScale = imageSize
+    ? Math.min(viewportSize.w / imageSize.w, viewportSize.h / imageSize.h)
+    : 1;
+  const fittedImage = imageSize
+    ? { width: imageSize.w * fitScale, height: imageSize.h * fitScale }
+    : {};
 
   return (
     <div className="annotation-workspace flex flex-col bg-neutral-950 text-neutral-100">
@@ -1183,6 +1243,13 @@ function AnnotatePage() {
               <VideoIcon className="w-3.5 h-3.5" /> Video
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setTrailOpen(true)}
+            className="flex min-h-11 items-center gap-1 rounded-lg bg-neutral-800 px-3 text-xs text-yellow-300"
+          >
+            <Layers size={16} /> Context Trail
+          </button>
         </div>
         <button
           type="button"
@@ -1453,7 +1520,9 @@ function AnnotatePage() {
           <span className="text-yellow-400 font-medium">Drag a box around the problem</span>
         )}
         {redactMode && !error && (
-          <span className="text-yellow-400 font-medium">Drag over anything to hide (faces, plates, IDs)</span>
+          <span className="text-yellow-400 font-medium">
+            Drag over anything to hide (faces, plates, IDs)
+          </span>
         )}
         {!tapMode && !boxMode && !redactMode && !selected && annotations.length > 0 && !error && (
           <span className="text-neutral-500">Tap any mark to edit it</span>
@@ -1471,171 +1540,171 @@ function AnnotatePage() {
       </div>
 
       <div className="annotation-controls">
-      {/* Edit sheet overlays the workspace without moving the image. */}
-      {selected && selectedIsRedaction ? (
-        <div className="annotation-sheet px-4 py-3 border-t border-neutral-800 bg-neutral-900">
-          <div className="flex items-center gap-2">
-            <EyeOff className="h-4 w-4 text-neutral-400" />
-            <span className="text-xs uppercase tracking-wide text-neutral-500">Hidden area</span>
-            <button
-              onClick={deleteSelected}
-              className="ml-auto flex items-center gap-1 text-xs text-red-400 active:text-red-300"
-              aria-label="Delete redaction"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Delete
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-neutral-500">
-            Painted over solid on the exported image. Drag it or its handles to adjust.
-          </p>
-          <button
-            onClick={deselect}
-            className="mt-3 w-full rounded-lg bg-yellow-400 py-2 text-sm font-semibold text-neutral-950 active:bg-yellow-300"
-          >
-            Done
-          </button>
-        </div>
-      ) : selected ? (
-        <div className="annotation-sheet px-4 py-3 border-t border-neutral-800 bg-neutral-900">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs uppercase tracking-wide text-neutral-500">
-              Describe the problem
-            </span>
-            <div className="ml-auto flex items-center gap-1">
-              {(["box", "ellipse"] as const).map((shape) => {
-                const active = selected && shapeOf(selected) === shape;
-                return (
-                  <button
-                    key={shape}
-                    onClick={() => setShape(shape)}
-                    aria-pressed={active}
-                    aria-label={shape === "box" ? "Box outline" : "Circle outline"}
-                    className={`flex h-7 w-7 items-center justify-center rounded-md border ${
-                      active
-                        ? "border-yellow-300 bg-yellow-400 text-neutral-950"
-                        : "border-neutral-700 bg-neutral-800 text-neutral-400"
-                    }`}
-                  >
-                    {shape === "box" ? (
-                      <Square className="h-4 w-4" />
-                    ) : (
-                      <Circle className="h-4 w-4" />
-                    )}
-                  </button>
-                );
-              })}
+        {/* Edit sheet overlays the workspace without moving the image. */}
+        {selected && selectedIsRedaction ? (
+          <div className="annotation-sheet px-4 py-3 border-t border-neutral-800 bg-neutral-900">
+            <div className="flex items-center gap-2">
+              <EyeOff className="h-4 w-4 text-neutral-400" />
+              <span className="text-xs uppercase tracking-wide text-neutral-500">Hidden area</span>
               <button
                 onClick={deleteSelected}
-                className="ml-1 flex items-center gap-1 text-xs text-red-400 active:text-red-300"
-                aria-label="Delete tag"
+                className="ml-auto flex items-center gap-1 text-xs text-red-400 active:text-red-300"
+                aria-label="Delete redaction"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </button>
             </div>
-          </div>
-          <div className="flex gap-1.5 mb-2">
-            {(["info", "minor", "major"] as const).map((sev) => {
-              const active = selected && sevOf(selected) === sev;
-              const label = sev === "info" ? "Info" : sev === "minor" ? "Minor" : "Major";
-              return (
-                <button
-                  key={sev}
-                  onClick={() => setSeverity(sev)}
-                  aria-pressed={active}
-                  aria-label={`Set severity to ${label}`}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
-                    active
-                      ? `${SEV_BG[sev]} ${SEV_TEXT[sev]} border-transparent`
-                      : "bg-neutral-800 text-neutral-400 border-neutral-700"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
-            {QUICK_LABELS.map((q) => (
-              <button
-                key={q}
-                onClick={() => insertQuickLabel(q)}
-                className="shrink-0 rounded-full border border-neutral-700 bg-neutral-800 px-2.5 py-1 text-xs text-neutral-300 active:bg-neutral-700"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              ref={captionInputRef}
-              value={captionDraft}
-              onChange={(e) => setCaptionDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveCaption();
-              }}
-              placeholder="e.g. weld cracked at base"
-              aria-label="Tag description"
-              className="flex-1 bg-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder:text-neutral-500"
-            />
-            {speechSupported && (
-              <button
-                onClick={listening ? stopListening : startListening}
-                className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
-                  listening
-                    ? "bg-red-500 animate-pulse text-white"
-                    : "bg-neutral-800 text-yellow-400 border border-neutral-700"
-                }`}
-                aria-label={listening ? "Stop listening" : "Dictate description"}
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-            )}
+            <p className="mt-2 text-xs text-neutral-500">
+              Painted over solid on the exported image. Drag it or its handles to adjust.
+            </p>
             <button
-              onClick={saveCaption}
-              className="w-11 h-11 rounded-full bg-yellow-400 text-neutral-950 flex items-center justify-center shrink-0 active:bg-yellow-300"
-              aria-label="Save description"
+              onClick={deselect}
+              className="mt-3 w-full rounded-lg bg-yellow-400 py-2 text-sm font-semibold text-neutral-950 active:bg-yellow-300"
             >
-              <Check className="w-5 h-5" />
+              Done
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-6">
-          <ModeButton
-            active={tapMode}
-            onClick={() => {
-              setTapMode((v) => !v);
-              setBoxMode(false);
-              setRedactMode(false);
-              setSelectedId(null);
-            }}
-            icon={<Hand className="w-6 h-6" />}
-            label={tapMode ? "Tap on" : "Tap"}
-          />
-          <ModeButton
-            active={boxMode}
-            onClick={() => {
-              setBoxMode((v) => !v);
-              setTapMode(false);
-              setRedactMode(false);
-              setSelectedId(null);
-            }}
-            icon={<Square className="w-6 h-6" />}
-            label={boxMode ? "Box on" : "Box"}
-          />
-          <ModeButton
-            active={redactMode}
-            onClick={() => {
-              setRedactMode((v) => !v);
-              setTapMode(false);
-              setBoxMode(false);
-              setSelectedId(null);
-            }}
-            icon={<EyeOff className="w-6 h-6" />}
-            label={redactMode ? "Hide on" : "Hide"}
-          />
-        </div>
-      )}
+        ) : selected ? (
+          <div className="annotation-sheet px-4 py-3 border-t border-neutral-800 bg-neutral-900">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs uppercase tracking-wide text-neutral-500">
+                Describe the problem
+              </span>
+              <div className="ml-auto flex items-center gap-1">
+                {(["box", "ellipse"] as const).map((shape) => {
+                  const active = selected && shapeOf(selected) === shape;
+                  return (
+                    <button
+                      key={shape}
+                      onClick={() => setShape(shape)}
+                      aria-pressed={active}
+                      aria-label={shape === "box" ? "Box outline" : "Circle outline"}
+                      className={`flex h-7 w-7 items-center justify-center rounded-md border ${
+                        active
+                          ? "border-yellow-300 bg-yellow-400 text-neutral-950"
+                          : "border-neutral-700 bg-neutral-800 text-neutral-400"
+                      }`}
+                    >
+                      {shape === "box" ? (
+                        <Square className="h-4 w-4" />
+                      ) : (
+                        <Circle className="h-4 w-4" />
+                      )}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={deleteSelected}
+                  className="ml-1 flex items-center gap-1 text-xs text-red-400 active:text-red-300"
+                  aria-label="Delete tag"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-1.5 mb-2">
+              {(["info", "minor", "major"] as const).map((sev) => {
+                const active = selected && sevOf(selected) === sev;
+                const label = sev === "info" ? "Info" : sev === "minor" ? "Minor" : "Major";
+                return (
+                  <button
+                    key={sev}
+                    onClick={() => setSeverity(sev)}
+                    aria-pressed={active}
+                    aria-label={`Set severity to ${label}`}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                      active
+                        ? `${SEV_BG[sev]} ${SEV_TEXT[sev]} border-transparent`
+                        : "bg-neutral-800 text-neutral-400 border-neutral-700"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
+              {QUICK_LABELS.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => insertQuickLabel(q)}
+                  className="shrink-0 rounded-full border border-neutral-700 bg-neutral-800 px-2.5 py-1 text-xs text-neutral-300 active:bg-neutral-700"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                ref={captionInputRef}
+                value={captionDraft}
+                onChange={(e) => setCaptionDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveCaption();
+                }}
+                placeholder="e.g. weld cracked at base"
+                aria-label="Tag description"
+                className="flex-1 bg-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder:text-neutral-500"
+              />
+              {speechSupported && (
+                <button
+                  onClick={listening ? stopListening : startListening}
+                  className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${
+                    listening
+                      ? "bg-red-500 animate-pulse text-white"
+                      : "bg-neutral-800 text-yellow-400 border border-neutral-700"
+                  }`}
+                  aria-label={listening ? "Stop listening" : "Dictate description"}
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              )}
+              <button
+                onClick={saveCaption}
+                className="w-11 h-11 rounded-full bg-yellow-400 text-neutral-950 flex items-center justify-center shrink-0 active:bg-yellow-300"
+                aria-label="Save description"
+              >
+                <Check className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-4 pt-2 pb-6 flex justify-center items-center gap-6">
+            <ModeButton
+              active={tapMode}
+              onClick={() => {
+                setTapMode((v) => !v);
+                setBoxMode(false);
+                setRedactMode(false);
+                setSelectedId(null);
+              }}
+              icon={<Hand className="w-6 h-6" />}
+              label={tapMode ? "Tap on" : "Tap"}
+            />
+            <ModeButton
+              active={boxMode}
+              onClick={() => {
+                setBoxMode((v) => !v);
+                setTapMode(false);
+                setRedactMode(false);
+                setSelectedId(null);
+              }}
+              icon={<Square className="w-6 h-6" />}
+              label={boxMode ? "Box on" : "Box"}
+            />
+            <ModeButton
+              active={redactMode}
+              onClick={() => {
+                setRedactMode((v) => !v);
+                setTapMode(false);
+                setBoxMode(false);
+                setSelectedId(null);
+              }}
+              icon={<EyeOff className="w-6 h-6" />}
+              label={redactMode ? "Hide on" : "Hide"}
+            />
+          </div>
+        )}
       </div>
       {appOverlays}
     </div>

@@ -1,11 +1,10 @@
-SoupyTag 1.4.0 — bigger toolkit, cleaner reports:
+SoupyTag 1.5.0 introduces Context Trail:
 
-- New Circle markup alongside Tap and Box
-- New Redact tool to hide faces, plates, and IDs before sharing
-- Add a report title + reference that print on the image and summary
-- One-tap quick labels for common defects
-- Export as JPG or lossless PNG
-- Optional vibration when a tag is placed
-- Cleaner tagging screen
+- Link wide-to-close photos with tappable highlights
+- Capture several nesting views from one video
+- Use breadcrumbs to return to the wider context
+- Keep descriptions with every view
+- Save editable trails or share an offline HTML viewer
+- Drafts save automatically on your device
 
-Your saved session and unlimited purchase are preserved.
+Your existing photo tagging and purchase are preserved.
