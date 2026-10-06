@@ -6,6 +6,19 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { resolve } from "node:path";
+
+function localMcpPlugin() {
+  const plugin = mcpPlugin();
+  const resolved = plugin.configResolved;
+  if (process.platform === "win32" && typeof resolved === "function") {
+    // Vite uses forward slashes, while the MCP containment check uses node:path.
+    plugin.configResolved = function (config) {
+      return resolved.call(this, { ...config, root: resolve(config.root) });
+    };
+  }
+  return plugin;
+}
 
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
@@ -35,7 +48,7 @@ export default defineConfig({
   ...(mobileBuild ? { nitro: false as const } : {}),
   vite: {
     // The MCP server routes are web-only; skipping their generator also avoids Windows path normalization errors.
-    plugins: mobileBuild ? [] : [mcpPlugin()],
+    plugins: mobileBuild ? [] : [localMcpPlugin()],
     ...(mobileBuild
       ? // Shell prerendering boots a vite preview server; bind it to IPv4 so it
         // also works in environments without IPv6.

@@ -105,26 +105,28 @@ export async function shareImage({
   fileName,
   title,
   text,
+  dialogTitle = "Share tagged photo",
 }: {
   blob: Blob;
   fileName: string;
   title: string;
   text: string;
+  dialogTitle?: string;
 }): Promise<ShareOutcome> {
   const shareNative = Capacitor.isNativePlatform()
     ? async () => {
-      const [{ Filesystem, Directory }, { Share }] = await Promise.all([
-        import("@capacitor/filesystem"),
-        import("@capacitor/share"),
-      ]);
-      const saved = await Filesystem.writeFile({
-        path: `shares/${fileName}`,
-        data: await blobToBase64(blob),
-        directory: Directory.Cache,
-        recursive: true,
-      });
-      await Share.share({ title, text, files: [saved.uri], dialogTitle: "Share tagged photo" });
-    }
+        const [{ Filesystem, Directory }, { Share }] = await Promise.all([
+          import("@capacitor/filesystem"),
+          import("@capacitor/share"),
+        ]);
+        const saved = await Filesystem.writeFile({
+          path: `shares/${fileName}`,
+          data: await blobToBase64(blob),
+          directory: Directory.Cache,
+          recursive: true,
+        });
+        await Share.share({ title, text, files: [saved.uri], dialogTitle });
+      }
     : undefined;
 
   const shareWeb = async () => {
@@ -137,4 +139,25 @@ export async function shareImage({
   };
 
   return shareWithAdapters({ shareNative, shareWeb });
+}
+
+/** Documents belong in Documents, never the photo gallery's image-only plugin. */
+export async function saveDocument({
+  blob,
+  fileName,
+}: {
+  blob: Blob;
+  fileName: string;
+}): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    const { Filesystem, Directory } = await import("@capacitor/filesystem");
+    await Filesystem.writeFile({
+      path: `SoupyTag/${fileName}`,
+      data: await blobToBase64(blob),
+      directory: Directory.Documents,
+      recursive: true,
+    });
+    return;
+  }
+  downloadBlobInBrowser(blob, fileName);
 }
