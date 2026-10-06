@@ -1,4 +1,5 @@
 import { validateTrail, type ContextTrail } from "./context-trail";
+import { createLatestWriter } from "./latest-writer";
 
 function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -27,6 +28,9 @@ async function transaction(mode: IDBTransactionMode, value?: ContextTrail): Prom
   }
 }
 let pendingWrite: Promise<void> = Promise.resolve();
+const persistLatest = createLatestWriter<ContextTrail>(async (trail) => {
+  await transaction("readwrite", validateTrail(trail));
+});
 
 export async function loadTrailDraft(): Promise<ContextTrail | null> {
   await pendingWrite;
@@ -34,11 +38,8 @@ export async function loadTrailDraft(): Promise<ContextTrail | null> {
   return value ? validateTrail(value) : null;
 }
 export async function saveTrailDraft(trail: ContextTrail): Promise<void> {
-  const snapshot = validateTrail(trail);
-  const write = pendingWrite.then(async () => {
-    await transaction("readwrite", snapshot);
-  });
-  // Preserve the order of edits without letting a failed write block later saves.
+  const write = persistLatest(trail);
+  // Loading/closing waits for the latest state, even when intermediate edits coalesce.
   pendingWrite = write.catch(() => {});
   await write;
 }

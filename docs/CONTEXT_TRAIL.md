@@ -1,5 +1,9 @@
 # Context Trail
 
+## 1.5.1 reliability update
+
+Draft saving coalesces pending edits while preserving explicit close/save completion. A failed draft load still lets the supplied photo become the first view, with a visible storage warning. The editor is a modal with keyboard focus contained inside it and restored to its launch control on close. Portable HTML files have a separate size allowance for escaped text and the offline viewer, while the underlying trail data remains capped at 12 MiB.
+
 Open **Context Trail** from the capture screen or photo toolbar. Start with a wide photo, then add closer photos of the same subject. Each view has a name and a description.
 
 On every view except the last, use **Box the subject** to highlight the part shown in the following photo. **Use centered box** gives you a starting point you can redraw. Tap a highlight to open the closer view. Breadcrumbs and **Wider** restore the surrounding context.
