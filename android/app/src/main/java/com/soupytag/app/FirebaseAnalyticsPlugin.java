@@ -1,7 +1,5 @@
 package com.soupytag.app;
 
-import android.os.Bundle;
-
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -66,17 +64,7 @@ public class FirebaseAnalyticsPlugin extends Plugin {
             return;
         }
 
-        Bundle bundle = new Bundle();
-        if (parameters != null) {
-            for (String key : parameters.keySet()) {
-                Object value = parameters.opt(key);
-                if (value instanceof String) bundle.putString(key, (String) value);
-                else if (value instanceof Boolean) bundle.putBoolean(key, (Boolean) value);
-                else if (value instanceof Integer) bundle.putLong(key, ((Integer) value).longValue());
-                else if (value instanceof Long) bundle.putLong(key, (Long) value);
-            }
-        }
-        analytics.logEvent(name, bundle);
+        analytics.logEvent(name, FirebaseAnalyticsEventPolicy.toBundle(parameters));
         call.resolve();
     }
 }

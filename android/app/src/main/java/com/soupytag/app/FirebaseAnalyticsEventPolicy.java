@@ -1,5 +1,7 @@
 package com.soupytag.app;
 
+import android.os.Bundle;
+
 import com.getcapacitor.JSObject;
 
 final class FirebaseAnalyticsEventPolicy {
@@ -28,5 +30,24 @@ final class FirebaseAnalyticsEventPolicy {
                 && timestampIncluded instanceof Boolean;
         }
         return false;
+    }
+
+    static Bundle toBundle(JSObject parameters) {
+        Bundle bundle = new Bundle();
+        if (parameters == null) return bundle;
+
+        for (String key : parameters.keySet()) {
+            Object value = parameters.opt(key);
+            if (value instanceof String) {
+                bundle.putString(key, (String) value);
+            } else if (value instanceof Boolean && "timestamp_included".equals(key)) {
+                bundle.putLong(key, (Boolean) value ? 1L : 0L);
+            } else if (value instanceof Integer) {
+                bundle.putLong(key, ((Integer) value).longValue());
+            } else if (value instanceof Long) {
+                bundle.putLong(key, (Long) value);
+            }
+        }
+        return bundle;
     }
 }
