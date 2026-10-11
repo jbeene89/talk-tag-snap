@@ -28,6 +28,7 @@ import java.util.concurrent.RejectedExecutionException;
 public class SoupyDocumentPlugin extends Plugin {
     private static final String TAG = "SoupyDocument";
     private static final AtomicBoolean PICKER_IN_PROGRESS = new AtomicBoolean(false);
+    private static final DocumentRequestGate REQUEST_GATE = new DocumentRequestGate();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @PluginMethod
@@ -36,7 +37,8 @@ public class SoupyDocumentPlugin extends Plugin {
             call.reject("The document request is invalid.");
             return;
         }
-        if (!PICKER_IN_PROGRESS.compareAndSet(false, true)) {
+        String requestId = call.getString("requestId");
+        if (!beginPicker("saveDocument", requestId)) {
             call.reject("A document save is already in progress.");
             return;
         }
@@ -44,7 +46,7 @@ public class SoupyDocumentPlugin extends Plugin {
         try {
             DocumentIo.execute(() -> stageAndLaunchPicker(call));
         } catch (RejectedExecutionException error) {
-            PICKER_IN_PROGRESS.set(false);
+            finishPicker("saveDocument", requestId);
             call.reject("Another document operation is still finishing. Try again.");
         }
     }
@@ -78,7 +80,7 @@ public class SoupyDocumentPlugin extends Plugin {
                 : "unknown";
             Log.w(TAG, "stage=" + stage + " bytes=" + bytes + " error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("saveDocument", requestId);
                 call.reject("Could not prepare the document for saving.");
             });
         }
@@ -96,10 +98,10 @@ public class SoupyDocumentPlugin extends Plugin {
             try {
                 DocumentIo.execute(() -> {
                     DocumentPayload.cleanup(staged);
-                    PICKER_IN_PROGRESS.set(false);
+                    finishPicker("saveDocument", tokenRequestId(call));
                 });
             } catch (RejectedExecutionException rejected) {
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("saveDocument", tokenRequestId(call));
             }
             call.reject("Could not open the document picker.");
         }
@@ -107,6 +109,7 @@ public class SoupyDocumentPlugin extends Plugin {
 
     @ActivityCallback
     private void saveDocumentResult(PluginCall call, ActivityResult result) {
+        if (!validatePickerCallback(call, "saveDocument")) return;
         String token = call == null ? null : call.getString("stagedToken");
         if (result.getResultCode() != Activity.RESULT_OK) {
             boolean cancelled = result.getResultCode() == Activity.RESULT_CANCELED;
@@ -123,7 +126,7 @@ public class SoupyDocumentPlugin extends Plugin {
         boolean destinationCreatedByPicker = resultCode == Activity.RESULT_OK && uri != null;
         try {
             DocumentIo.execute(() ->
-                writeAndVerify(call, resultCode, destinationCreatedByPicker, token, uri)
+                writeAndVerify(call, resultCode, destinationCreatedByPicker, token, uri, tokenRequestId(call))
             );
         } catch (RejectedExecutionException error) {
             Log.w(TAG, "stage=queue bytes=unknown error=" + error.getClass().getSimpleName());
@@ -132,6 +135,7 @@ public class SoupyDocumentPlugin extends Plugin {
     }
 
     private void finishSaveWithoutDestination(PluginCall call, String token, boolean cancelled) {
+        String requestId = tokenRequestId(call);
         try {
             DocumentIo.execute(() -> {
                 DocumentPayload.cleanup(stagingDirectory(), token);
@@ -142,7 +146,7 @@ public class SoupyDocumentPlugin extends Plugin {
                     } else if (call != null) {
                         call.resolve(requestResult(call, false, false, "save_failed"));
                     }
-                    PICKER_IN_PROGRESS.set(false);
+                    finishPicker("saveDocument", requestId);
                 });
             });
         } catch (RejectedExecutionException error) {
@@ -152,7 +156,7 @@ public class SoupyDocumentPlugin extends Plugin {
                 } else if (call != null) {
                     call.resolve(requestResult(call, false, false, "save_failed"));
                 }
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("saveDocument", requestId);
             });
         }
     }
@@ -162,7 +166,8 @@ public class SoupyDocumentPlugin extends Plugin {
         int resultCode,
         boolean destinationCreatedByPicker,
         String token,
-        Uri uri
+        Uri uri,
+        String requestId
     ) {
         DocumentPayload.Staged staged = null;
         boolean restoredRequest = false;
@@ -206,7 +211,7 @@ public class SoupyDocumentPlugin extends Plugin {
             boolean readbackVerified = verifiedByReadback;
             mainHandler.post(() -> {
                 JSObject response = new JSObject();
-                response.put("requestId", tokenRequestId(call));
+                response.put("requestId", requestId);
                 response.put("ok", true);
                 response.put("cancelled", false);
                 response.put("uri", uri.toString());
@@ -237,17 +242,18 @@ public class SoupyDocumentPlugin extends Plugin {
         } finally {
             DocumentPayload.cleanup(staged);
             if (staged == null) DocumentPayload.cleanup(stagingDirectory(), token);
-            mainHandler.post(() -> PICKER_IN_PROGRESS.set(false));
+            mainHandler.post(() -> finishPicker("saveDocument", requestId));
         }
     }
 
     @PluginMethod
     public void openDocument(PluginCall call) {
-        if (!isValidRequestId(call.getString("requestId"))) {
+        String requestId = call.getString("requestId");
+        if (!isValidRequestId(requestId)) {
             call.reject("The document request is invalid.");
             return;
         }
-        if (!PICKER_IN_PROGRESS.compareAndSet(false, true)) {
+        if (!beginPicker("openDocument", requestId)) {
             call.reject("A document picker is already in progress.");
             return;
         }
@@ -263,13 +269,14 @@ public class SoupyDocumentPlugin extends Plugin {
             startActivityForResult(call, intent, "openDocumentResult");
         } catch (Exception error) {
             Log.w(TAG, "stage=open-picker bytes=0 error=" + error.getClass().getSimpleName());
-            PICKER_IN_PROGRESS.set(false);
+            finishPicker("openDocument", tokenRequestId(call));
             call.reject("Could not open the document picker.");
         }
     }
 
     @ActivityCallback
     private void openDocumentResult(PluginCall call, ActivityResult result) {
+        if (!validatePickerCallback(call, "openDocument")) return;
         if (result.getResultCode() != Activity.RESULT_OK) {
             mainHandler.post(() -> {
                 if (result.getResultCode() == Activity.RESULT_CANCELED && call != null) {
@@ -277,7 +284,7 @@ public class SoupyDocumentPlugin extends Plugin {
                 } else if (call != null) {
                     call.resolve(requestResult(call, false, false, "open_failed"));
                 }
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("openDocument", tokenRequestId(call));
             });
             return;
         }
@@ -286,18 +293,18 @@ public class SoupyDocumentPlugin extends Plugin {
         if (uri == null) {
             mainHandler.post(() -> {
                 if (call != null) call.resolve(requestResult(call, false, false, "open_failed"));
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("openDocument", tokenRequestId(call));
             });
             return;
         }
+        String requestId = tokenRequestId(call);
         try {
-            String requestId = call.getString("requestId");
             DocumentIo.execute(() -> readOpenedDocument(call, requestId, uri));
         } catch (RejectedExecutionException error) {
             Log.w(TAG, "stage=open-queue bytes=0 error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {
                 if (call != null) call.resolve(requestResult(call, false, false, "open_failed"));
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("openDocument", requestId);
             });
         }
     }
@@ -329,14 +336,14 @@ public class SoupyDocumentPlugin extends Plugin {
                 try {
                     if (call != null) call.resolve(response);
                 } finally {
-                    PICKER_IN_PROGRESS.set(false);
+                    finishPicker("openDocument", requestId);
                 }
             });
         } catch (Exception error) {
             Log.w(TAG, "stage=open-read bytes=unknown error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {
                 if (call != null) call.resolve(requestResult(requestId, false, false, "open_failed"));
-                PICKER_IN_PROGRESS.set(false);
+                finishPicker("openDocument", requestId);
             });
         }
     }
@@ -378,6 +385,42 @@ public class SoupyDocumentPlugin extends Plugin {
 
     private String tokenRequestId(PluginCall call) {
         return call == null ? null : call.getString("requestId");
+    }
+
+    private boolean beginPicker(String method, String requestId) {
+        if (!PICKER_IN_PROGRESS.compareAndSet(false, true)) return false;
+        if (REQUEST_GATE.begin(method, requestId)) return true;
+        PICKER_IN_PROGRESS.set(false);
+        return false;
+    }
+
+    private void finishPicker(String method, String requestId) {
+        if (REQUEST_GATE.finish(method, requestId)) PICKER_IN_PROGRESS.set(false);
+    }
+
+    private void finishUncorrelatedPicker(String method) {
+        if (REQUEST_GATE.finishUncorrelatedCallback(method)) PICKER_IN_PROGRESS.set(false);
+    }
+
+    private boolean validatePickerCallback(PluginCall call, String method) {
+        if (call == null) {
+            finishUncorrelatedPicker(method);
+            return false;
+        }
+        if (!"SoupyDocument".equals(call.getPluginId()) || !method.equals(call.getMethodName())) {
+            return false;
+        }
+
+        String requestId = tokenRequestId(call);
+        if (!isValidRequestId(requestId)) {
+            finishUncorrelatedPicker(method);
+            call.resolve(requestResult((String) null, false, false,
+                method.equals("openDocument") ? "open_failed" : "save_failed"));
+            return false;
+        }
+        if (!REQUEST_GATE.correlate(method, requestId)) return false;
+        PICKER_IN_PROGRESS.set(true);
+        return true;
     }
 
     private JSObject requestResult(PluginCall call, boolean cancelled, boolean ok, String errorCode) {
