@@ -253,8 +253,16 @@ final class DocumentPayload {
         }
     }
 
-    static boolean mayDeleteDestination(int resultCode, boolean restoredRequest, boolean writeAttempted) {
-        return resultCode == Activity.RESULT_OK && restoredRequest && writeAttempted;
+    static boolean mayDeleteDestination(
+        int resultCode,
+        boolean destinationCreatedByPicker,
+        boolean restoredRequest,
+        boolean writeAttempted
+    ) {
+        return resultCode == Activity.RESULT_OK &&
+            destinationCreatedByPicker &&
+            restoredRequest &&
+            writeAttempted;
     }
 
     private static long maxBytesFor(String mimeType) throws IOException {

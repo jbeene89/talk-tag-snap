@@ -114,8 +114,11 @@ public class SoupyDocumentPlugin extends Plugin {
             return;
         }
         int resultCode = result.getResultCode();
+        boolean destinationCreatedByPicker = resultCode == Activity.RESULT_OK && uri != null;
         try {
-            DocumentIo.execute(() -> writeAndVerify(call, resultCode, token, uri));
+            DocumentIo.execute(() ->
+                writeAndVerify(call, resultCode, destinationCreatedByPicker, token, uri)
+            );
         } catch (RejectedExecutionException error) {
             Log.w(TAG, "stage=queue bytes=unknown error=" + error.getClass().getSimpleName());
             finishSaveWithoutDestination(call, token, false);
@@ -152,7 +155,13 @@ public class SoupyDocumentPlugin extends Plugin {
         }
     }
 
-    private void writeAndVerify(PluginCall call, int resultCode, String token, Uri uri) {
+    private void writeAndVerify(
+        PluginCall call,
+        int resultCode,
+        boolean destinationCreatedByPicker,
+        String token,
+        Uri uri
+    ) {
         DocumentPayload.Staged staged = null;
         boolean restoredRequest = false;
         boolean writeAttempted = false;
@@ -204,7 +213,12 @@ public class SoupyDocumentPlugin extends Plugin {
                     (readbackVerified ? "readback" : "provider-size"));
             });
         } catch (Exception error) {
-            if (DocumentPayload.mayDeleteDestination(resultCode, restoredRequest, writeAttempted)) {
+            if (DocumentPayload.mayDeleteDestination(
+                resultCode,
+                destinationCreatedByPicker,
+                restoredRequest,
+                writeAttempted
+            )) {
                 try {
                     getContext().getContentResolver().delete(uri, null, null);
                 } catch (Exception ignored) {
@@ -301,9 +315,14 @@ public class SoupyDocumentPlugin extends Plugin {
             response.put("base64", base64);
             response.put("fileName", name);
             response.put("mimeType", mimeType);
-            call.resolve(response);
             Log.i(TAG, "stage=open-read bytes=" + bytes + " mime=" + mimeType);
-            PICKER_IN_PROGRESS.set(false);
+            mainHandler.post(() -> {
+                try {
+                    if (call != null) call.resolve(response);
+                } finally {
+                    PICKER_IN_PROGRESS.set(false);
+                }
+            });
         } catch (Exception error) {
             Log.w(TAG, "stage=open-read bytes=unknown error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {

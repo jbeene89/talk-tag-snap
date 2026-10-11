@@ -148,10 +148,11 @@ public class DocumentPayloadTest {
 
     @Test
     public void destinationCleanupRequiresSuccessfulResultRestoredRequestAndWriteAttempt() {
-        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_CANCELED, true, true));
-        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, false, true));
-        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, false));
-        assertTrue(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, true));
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_CANCELED, true, true, true));
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, false, true, true));
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, false, true));
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, true, false));
+        assertTrue(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, true, true));
     }
 
     @Test
