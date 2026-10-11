@@ -16,11 +16,15 @@ public final class SigningKeyVerifier {
     private SigningKeyVerifier() {}
 
     public static void main(String[] args) {
-        int status = verify(args);
+        int status = verify(args, EXPECTED_UPLOAD_CERT_SHA256);
         if (status != 0) System.exit(status);
     }
 
-    private static int verify(String[] args) {
+    static int verifyForTest(String[] args, String expectedFingerprint) {
+        return verify(args, expectedFingerprint);
+    }
+
+    private static int verify(String[] args, String expectedFingerprint) {
         if (args.length != 1) {
             return fail("store_unlock");
         }
@@ -48,6 +52,13 @@ public final class SigningKeyVerifier {
             }
             System.out.println("alias_access=success");
 
+            failureCategory = "certificate_match";
+            Certificate certificate = store.getCertificate(alias);
+            String fingerprint = sha256(certificate.getEncoded());
+            boolean certificateMatches = fingerprint.equals(expectedFingerprint);
+            System.out.println("certificate_sha256=" + fingerprint);
+            System.out.println("certificate_match=" + (certificateMatches ? "success" : "failed"));
+
             failureCategory = "private_key_access";
             if (keyPassword == null) {
                 return fail("private_key_access");
@@ -58,20 +69,13 @@ public final class SigningKeyVerifier {
             } catch (Exception ignored) {
                 return fail("private_key_access");
             }
-            Certificate certificate = store.getCertificate(alias);
-            if (!(key instanceof PrivateKey) || certificate == null ||
+            if (!(key instanceof PrivateKey) ||
                 !matchesCertificateKey((PrivateKey) key, certificate)) {
                 return fail("private_key_access");
             }
             System.out.println("private_key_access=success");
 
-            failureCategory = "certificate_match";
-            String fingerprint = sha256(certificate.getEncoded());
-            if (!fingerprint.equals(EXPECTED_UPLOAD_CERT_SHA256))
-                return fail("certificate_match");
-            System.out.println("certificate_match=success");
-            System.out.println("certificate_sha256=" + fingerprint);
-            return 0;
+            return certificateMatches ? 0 : 1;
         } catch (Exception ignored) {
             return fail(failureCategory);
         } finally {
