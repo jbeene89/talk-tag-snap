@@ -47,6 +47,39 @@ type WaitingRequest = {
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_RECENT_REQUESTS = 128;
 
+function isValidBase64(value: string, maxDecodedBytes: number): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) return false;
+  const maxEncodedBytes = Math.ceil(maxDecodedBytes / 3) * 4;
+  if (value.length > maxEncodedBytes) return false;
+
+  let padding = 0;
+  if (value.endsWith("=")) {
+    padding = value.endsWith("==") ? 2 : 1;
+  }
+  const contentEnd = value.length - padding;
+  if (
+    (padding === 1 && contentEnd % 4 !== 3) ||
+    (padding === 2 && contentEnd % 4 !== 2) ||
+    value.length / 4 * 3 - padding > maxDecodedBytes
+  )
+    return false;
+
+  for (let index = 0; index < contentEnd; index += 1) {
+    const code = value.charCodeAt(index);
+    const valid =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      code === 43 ||
+      code === 47;
+    if (!valid) return false;
+  }
+  for (let index = contentEnd; index < value.length; index += 1) {
+    if (value.charCodeAt(index) !== 61) return false;
+  }
+  return true;
+}
+
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
@@ -79,13 +112,7 @@ async function trailFileFrom(value: unknown): Promise<{ file: File; fileName: st
 
   const fileName = safeFileName(data.fileName);
   const base64 = data.base64;
-  const maxEncodedBytes = Math.ceil(MAX_TRAIL_FILE_BYTES / 3) * 4;
-  if (
-    base64.length === 0 ||
-    base64.length > maxEncodedBytes ||
-    base64.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)
-  )
+  if (!isValidBase64(base64, MAX_TRAIL_FILE_BYTES))
     throw new Error("The recovered trail is malformed or too large.");
 
   const binary = atob(base64);

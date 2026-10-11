@@ -17,6 +17,15 @@ const minimalTrail: ContextTrail = {
 };
 const trailBase64 = btoa(JSON.stringify(minimalTrail));
 
+function makeNearLimitTrailBase64(): string {
+  const json = `${JSON.stringify(minimalTrail).slice(0, -1)},"padding":"${"x".repeat(9_000_000)}"}`;
+  return btoa(json);
+}
+
+function makeLargeMalformedBase64(): string {
+  return `${"A".repeat(11_999_996)}!AAA`;
+}
+
 function event(
   methodName: "saveDocument" | "openDocument",
   data: Record<string, unknown>,
@@ -176,6 +185,64 @@ test("malformed restored trail content is rejected without staging an import", a
   }));
   assert.equal(coordinator.getSnapshot().pendingImport, null);
   assert.equal(coordinator.getSnapshot().notice?.status, "failed");
+});
+
+test("near-limit valid Base64 opens through ordinary and restored results without regex stack overflow", async () => {
+  const base64 = makeNearLimitTrailBase64();
+  assert.ok(base64.length > 12_000_000);
+  const result = {
+    requestId,
+    ok: true,
+    cancelled: false,
+    fileName: "large-inspection.json",
+    mimeType: "application/json",
+    base64,
+  };
+
+  const ordinary = new DocumentRestoredResultCoordinator();
+  const ordinaryOpen = ordinary.waitFor("openDocument", requestId);
+  await assert.doesNotReject(ordinary.acceptPromiseResult("openDocument", requestId, result));
+  assert.equal((await ordinaryOpen).operation, "openDocument");
+  assert.equal(ordinary.getSnapshot().pendingImport?.fileName, "large-inspection.json");
+
+  const restored = new DocumentRestoredResultCoordinator();
+  await assert.doesNotReject(
+    restored.acceptRestoredResult(event("openDocument", result)),
+  );
+  assert.equal(restored.getSnapshot().pendingImport?.fileName, "large-inspection.json");
+});
+
+test("large malformed Base64 fails safely for ordinary and restored Open without staging", async () => {
+  const base64 = makeLargeMalformedBase64();
+  const result = {
+    requestId,
+    ok: true,
+    cancelled: false,
+    fileName: "malformed.json",
+    mimeType: "application/json",
+    base64,
+  };
+
+  const ordinary = new DocumentRestoredResultCoordinator();
+  const waiting = ordinary.waitFor("openDocument", requestId);
+  const ordinaryResult = ordinary.acceptPromiseResult("openDocument", requestId, result);
+  const [acceptance, caller] = await Promise.allSettled([ordinaryResult, waiting]);
+  assert.equal(acceptance.status, "rejected");
+  assert.equal(caller.status, "rejected");
+  if (acceptance.status === "rejected") {
+    const error: unknown = acceptance.reason;
+    assert.ok(error instanceof Error);
+    assert.notEqual(error.name, "RangeError");
+    assert.match(error.message, /malformed or too large/);
+  }
+  assert.equal(ordinary.getSnapshot().pendingImport, null);
+
+  const restored = new DocumentRestoredResultCoordinator();
+  await assert.doesNotReject(
+    restored.acceptRestoredResult(event("openDocument", result)),
+  );
+  assert.equal(restored.getSnapshot().pendingImport, null);
+  assert.equal(restored.getSnapshot().notice?.status, "failed");
 });
 
 test("confirmation backs up the latest draft changed while the recovered import was pending", async () => {
