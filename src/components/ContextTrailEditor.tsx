@@ -24,7 +24,6 @@ import {
   MAX_TRAIL_LEVELS,
   MAX_TRAIL_ANNOTATIONS,
   normalizedBox,
-  parseTrail,
   trailHtml,
   validateTrail,
   type ContextTrail,
@@ -37,9 +36,19 @@ import {
   saveTrailDraft,
   saveTrailDraftBackup,
 } from "@/lib/context-trail-storage";
-import { hydrateTrailDraft, restoreTrailBackup } from "@/lib/context-trail-recovery";
+import {
+  hydrateTrailDraft,
+  replaceTrailFromFile,
+  restoreTrailBackup,
+} from "@/lib/context-trail-recovery";
 import { toggleTrailDrawingMode, type TrailDrawingMode } from "@/lib/context-trail-drawing-mode";
-import { openDocument, saveDocument, shareImage, usesNativeDocumentPicker } from "@/lib/native";
+import {
+  documentRestoredResults,
+  openDocument,
+  saveDocument,
+  shareImage,
+  usesNativeDocumentPicker,
+} from "@/lib/native";
 import { createTrailPdf } from "@/lib/context-trail-pdf";
 import type { Annotation } from "@/lib/annotations";
 import "./context-trail.css";
@@ -128,6 +137,9 @@ export function ContextTrailEditor({
   const [videoPicked, setVideoPicked] = useState(0);
   const [newPrompt, setNewPrompt] = useState(false);
   const [hasBackup, setHasBackup] = useState(false);
+  const [pendingRecoveredImport, setPendingRecoveredImport] = useState(
+    documentRestoredResults.getSnapshot().pendingImport,
+  );
   const start = useRef<Point | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -229,6 +241,14 @@ export function ContextTrailEditor({
     };
   }, [hydrationAttempt]);
 
+  useEffect(
+    () =>
+      documentRestoredResults.subscribe((snapshot) =>
+        setPendingRecoveredImport(snapshot.pendingImport),
+      ),
+    [],
+  );
+
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
@@ -298,8 +318,8 @@ export function ContextTrailEditor({
     }
   }
 
-  async function openFile(file: File, alreadyLocked = false) {
-    if (!alreadyLocked && actionBusy.current) return;
+  async function openFile(file: File, alreadyLocked = false): Promise<boolean> {
+    if (!alreadyLocked && actionBusy.current) return false;
     actionBusy.current = true;
     setBusy(true);
     setError("");
@@ -307,28 +327,45 @@ export function ContextTrailEditor({
       if (file.size > MAX_TRAIL_FILE_BYTES)
         throw new Error("Choose a trail file smaller than 12 MB.");
       await replaceFromFile(file);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "This trail file could not be opened.");
+      return false;
     } finally {
       actionBusy.current = false;
       setBusy(false);
     }
   }
 
-  async function replaceFromFile(file: File) {
-    const next = validateTrail(await redactStoredPhotos(parseTrail(await file.text())));
-    const currentTrail = trailRef.current;
-    if (hasTrailWork(currentTrail)) {
-      await saveTrailDraft(currentTrail);
-      await saveTrailDraftBackup(currentTrail);
-      setHasBackup(true);
+  async function confirmRecoveredImport() {
+    const recovered = pendingRecoveredImport;
+    if (!hydrated || busy || actionBusy.current || !recovered) return;
+    if (await openFile(recovered.file)) {
+      documentRestoredResults.completePendingImport(recovered.requestId);
     }
-    trailRef.current = next;
-    setTrail(next);
-    setActive(0);
-    setPreview(false);
-    setDrawingMode(null);
-    setStatus(`Opened ${file.name}; previous draft kept in local recovery`);
+  }
+
+  async function replaceFromFile(file: File) {
+    const backedUp = await replaceTrailFromFile({
+      file,
+      current: () => trailRef.current,
+      prepare: redactStoredPhotos,
+      saveCurrent: saveTrailDraft,
+      saveBackup: saveTrailDraftBackup,
+      commit: (next) => {
+        trailRef.current = next;
+        setTrail(next);
+        setActive(0);
+        setPreview(false);
+        setDrawingMode(null);
+      },
+    });
+    if (backedUp) setHasBackup(true);
+    setStatus(
+      backedUp
+        ? `Opened ${file.name}; previous draft kept in local recovery`
+        : `Opened ${file.name}`,
+    );
   }
 
   async function chooseTrail() {
@@ -354,7 +391,7 @@ export function ContextTrailEditor({
         return;
       }
       if (picked.file) {
-        await replaceFromFile(picked.file);
+        setStatus("Trail ready for review; current draft kept until you confirm");
         return;
       }
     } catch (e) {
@@ -587,6 +624,36 @@ export function ContextTrailEditor({
           }}
         >
           <section className="trail-workspace" aria-label="Context Trail editor">
+            {pendingRecoveredImport && (
+              <div className="trail-empty" role="status">
+                <h2>Recovered trail ready for review</h2>
+                <p>
+                  {pendingRecoveredImport.fileName} is validated. Your current draft stays unchanged
+                  unless you choose to replace it; it will be kept in local recovery.
+                </p>
+                <div className="trail-actions">
+                  <button
+                    className="trail-button trail-primary"
+                    disabled={!hydrated || busy}
+                    onClick={() => void confirmRecoveredImport()}
+                  >
+                    Review and replace
+                  </button>
+                  <button
+                    className="trail-button"
+                    disabled={busy}
+                    onClick={() => {
+                      documentRestoredResults.dismissPendingImport(
+                        pendingRecoveredImport.requestId,
+                      );
+                      setStatus("Recovered trail declined; current draft kept");
+                    }}
+                  >
+                    Keep current draft
+                  </button>
+                </div>
+              </div>
+            )}
             <header className="trail-header">
               <button
                 className="trail-icon"

@@ -1,4 +1,27 @@
-import { validateTrail, type ContextTrail } from "./context-trail.ts";
+import { parseTrail, validateTrail, type ContextTrail } from "./context-trail.ts";
+
+export async function replaceTrailFromFile(options: {
+  file: Pick<File, "text">;
+  current: () => ContextTrail;
+  prepare: (trail: ContextTrail) => Promise<ContextTrail>;
+  saveCurrent: (trail: ContextTrail) => Promise<void>;
+  saveBackup: (trail: ContextTrail) => Promise<void>;
+  commit: (trail: ContextTrail) => void;
+}): Promise<boolean> {
+  const imported = validateTrail(
+    await options.prepare(parseTrail(await options.file.text())),
+  );
+  const current = validateTrail(options.current());
+  const hasWork =
+    Boolean(current.title.trim() || current.report.title.trim() || current.report.reference.trim()) ||
+    current.levels.length > 0;
+  if (hasWork) {
+    await options.saveCurrent(current);
+    await options.saveBackup(current);
+  }
+  options.commit(imported);
+  return hasWork;
+}
 
 export async function hydrateTrailDraft(options: {
   loadCurrent: () => Promise<ContextTrail | null>;

@@ -32,6 +32,10 @@ public class SoupyDocumentPlugin extends Plugin {
 
     @PluginMethod
     public void saveDocument(PluginCall call) {
+        if (!isValidRequestId(call.getString("requestId"))) {
+            call.reject("The document request is invalid.");
+            return;
+        }
         if (!PICKER_IN_PROGRESS.compareAndSet(false, true)) {
             call.reject("A document save is already in progress.");
             return;
@@ -47,6 +51,7 @@ public class SoupyDocumentPlugin extends Plugin {
 
     private void stageAndLaunchPicker(PluginCall call) {
         String stage = "validate";
+        String requestId = call.getString("requestId");
         DocumentPayload.Staged staged = null;
         try {
             String fileName = DocumentPayload.validateFileName(
@@ -63,6 +68,7 @@ public class SoupyDocumentPlugin extends Plugin {
             DocumentPayload.Staged ready = staged;
             while (call.getData().length() > 0) call.getData().remove(call.getData().keys().next());
             call.getData().put("stagedToken", ready.token);
+            call.getData().put("requestId", requestId);
             Log.i(TAG, "stage=ready bytes=" + ready.length + " mime=" + ready.mimeType);
             mainHandler.post(() -> launchSavePicker(call, ready, fileName));
         } catch (Exception error) {
@@ -132,11 +138,9 @@ public class SoupyDocumentPlugin extends Plugin {
                 mainHandler.post(() -> {
                     if (cancelled && call != null) {
                         Log.i(TAG, "stage=cancelled bytes=0");
-                        JSObject response = new JSObject();
-                        response.put("cancelled", true);
-                        call.resolve(response);
+                        call.resolve(requestResult(call, true, false, "cancelled"));
                     } else if (call != null) {
-                        call.reject("The system picker did not return a saved document.");
+                        call.resolve(requestResult(call, false, false, "save_failed"));
                     }
                     PICKER_IN_PROGRESS.set(false);
                 });
@@ -144,11 +148,9 @@ public class SoupyDocumentPlugin extends Plugin {
         } catch (RejectedExecutionException error) {
             mainHandler.post(() -> {
                 if (cancelled && call != null) {
-                    JSObject response = new JSObject();
-                    response.put("cancelled", true);
-                    call.resolve(response);
+                    call.resolve(requestResult(call, true, false, "cancelled"));
                 } else if (call != null) {
-                    call.reject("The system picker did not return a saved document.");
+                    call.resolve(requestResult(call, false, false, "save_failed"));
                 }
                 PICKER_IN_PROGRESS.set(false);
             });
@@ -204,6 +206,8 @@ public class SoupyDocumentPlugin extends Plugin {
             boolean readbackVerified = verifiedByReadback;
             mainHandler.post(() -> {
                 JSObject response = new JSObject();
+                response.put("requestId", tokenRequestId(call));
+                response.put("ok", true);
                 response.put("cancelled", false);
                 response.put("uri", uri.toString());
                 response.put("fileName", savedName);
@@ -228,7 +232,7 @@ public class SoupyDocumentPlugin extends Plugin {
             Log.w(TAG, "stage=" + stage + " bytes=" +
                 (staged == null ? "unknown" : staged.length) + " error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {
-                if (call != null) call.reject("Could not verify the saved document. The export was not confirmed.");
+                if (call != null) call.resolve(requestResult(call, false, false, "save_failed"));
             });
         } finally {
             DocumentPayload.cleanup(staged);
@@ -239,6 +243,10 @@ public class SoupyDocumentPlugin extends Plugin {
 
     @PluginMethod
     public void openDocument(PluginCall call) {
+        if (!isValidRequestId(call.getString("requestId"))) {
+            call.reject("The document request is invalid.");
+            return;
+        }
         if (!PICKER_IN_PROGRESS.compareAndSet(false, true)) {
             call.reject("A document picker is already in progress.");
             return;
@@ -265,11 +273,9 @@ public class SoupyDocumentPlugin extends Plugin {
         if (result.getResultCode() != Activity.RESULT_OK) {
             mainHandler.post(() -> {
                 if (result.getResultCode() == Activity.RESULT_CANCELED && call != null) {
-                    JSObject response = new JSObject();
-                    response.put("cancelled", true);
-                    call.resolve(response);
+                    call.resolve(requestResult(call, true, false, "cancelled"));
                 } else if (call != null) {
-                    call.reject("The document picker did not return a selected file.");
+                    call.resolve(requestResult(call, false, false, "open_failed"));
                 }
                 PICKER_IN_PROGRESS.set(false);
             });
@@ -279,23 +285,24 @@ public class SoupyDocumentPlugin extends Plugin {
         Uri uri = result.getData() == null ? null : result.getData().getData();
         if (uri == null) {
             mainHandler.post(() -> {
-                if (call != null) call.reject("The system picker did not return a document location.");
+                if (call != null) call.resolve(requestResult(call, false, false, "open_failed"));
                 PICKER_IN_PROGRESS.set(false);
             });
             return;
         }
         try {
-            DocumentIo.execute(() -> readOpenedDocument(call, uri));
+            String requestId = call.getString("requestId");
+            DocumentIo.execute(() -> readOpenedDocument(call, requestId, uri));
         } catch (RejectedExecutionException error) {
             Log.w(TAG, "stage=open-queue bytes=0 error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {
-                if (call != null) call.reject("Another document operation is still finishing. Try again.");
+                if (call != null) call.resolve(requestResult(call, false, false, "open_failed"));
                 PICKER_IN_PROGRESS.set(false);
             });
         }
     }
 
-    private void readOpenedDocument(PluginCall call, Uri uri) {
+    private void readOpenedDocument(PluginCall call, String requestId, Uri uri) {
         try (InputStream input = getContext().getContentResolver().openInputStream(uri);
              java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             if (input == null) throw new IllegalStateException("Could not open selected document");
@@ -311,6 +318,8 @@ public class SoupyDocumentPlugin extends Plugin {
             String mimeType = getContext().getContentResolver().getType(uri);
             long bytes = output.size();
             JSObject response = new JSObject();
+            response.put("requestId", requestId);
+            response.put("ok", true);
             response.put("cancelled", false);
             response.put("base64", base64);
             response.put("fileName", name);
@@ -326,7 +335,7 @@ public class SoupyDocumentPlugin extends Plugin {
         } catch (Exception error) {
             Log.w(TAG, "stage=open-read bytes=unknown error=" + error.getClass().getSimpleName());
             mainHandler.post(() -> {
-                if (call != null) call.reject("Could not open the selected document.");
+                if (call != null) call.resolve(requestResult(requestId, false, false, "open_failed"));
                 PICKER_IN_PROGRESS.set(false);
             });
         }
@@ -360,5 +369,27 @@ public class SoupyDocumentPlugin extends Plugin {
 
     private boolean isValidToken(String token) {
         return token != null && token.matches("[0-9a-fA-F-]{36}");
+    }
+
+    private boolean isValidRequestId(String requestId) {
+        return requestId != null &&
+            requestId.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    }
+
+    private String tokenRequestId(PluginCall call) {
+        return call == null ? null : call.getString("requestId");
+    }
+
+    private JSObject requestResult(PluginCall call, boolean cancelled, boolean ok, String errorCode) {
+        return requestResult(tokenRequestId(call), cancelled, ok, errorCode);
+    }
+
+    private JSObject requestResult(String requestId, boolean cancelled, boolean ok, String errorCode) {
+        JSObject response = new JSObject();
+        if (requestId != null) response.put("requestId", requestId);
+        response.put("ok", ok);
+        response.put("cancelled", cancelled);
+        if (!ok && !cancelled) response.put("errorCode", errorCode);
+        return response;
     }
 }
