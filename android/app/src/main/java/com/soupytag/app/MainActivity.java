@@ -10,7 +10,6 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        FirebaseAnalyticsStartup.apply(this);
         registerPlugin(FirebaseAnalyticsPlugin.class);
         registerPlugin(SoupyReviewPlugin.class);
         registerPlugin(SoupyExportPlugin.class);
