@@ -1,3 +1,5 @@
+import type { Annotation, Severity, Shape } from "./annotations";
+
 export type TrailBox = { x: number; y: number; w: number; h: number };
 export type TrailLevel = {
   id: string;
@@ -6,15 +8,22 @@ export type TrailLevel = {
   image: string;
   width: number;
   height: number;
+  annotations: Annotation[];
   /** Normalized coordinates on this image, linking to the following level. */
   hotspot?: TrailBox;
   videoTime?: number;
 };
-export type ContextTrail = { version: 1; title: string; levels: TrailLevel[] };
+export type ContextTrail = {
+  version: 2;
+  title: string;
+  report: { title: string; reference: string };
+  levels: TrailLevel[];
+};
 export const MAX_TRAIL_LEVELS = 12;
 export const MAX_TRAIL_BYTES = 12 * 1024 * 1024;
 // HTML escapes metadata and includes its own offline viewer; data stays capped at 12 MiB.
 export const MAX_TRAIL_FILE_BYTES = MAX_TRAIL_BYTES + 256 * 1024;
+export const MAX_TRAIL_ANNOTATIONS = 100;
 export const TRAIL_LABELS = ["Where", "What", "What part", "Exact problem"];
 
 export function levelLabel(index: number): string {
@@ -41,13 +50,20 @@ export function validateTrail(value: unknown): ContextTrail {
     throw new Error("This is not a valid Context Trail. Choose a trail saved by Talk&Tag.");
   };
   if (!value || typeof value !== "object") return fail();
-  const trail = value as ContextTrail;
+  const trail = value as ContextTrail & { version: number; report?: unknown };
   if (
-    trail.version !== 1 ||
+    (trail.version !== 1 && trail.version !== 2) ||
     typeof trail.title !== "string" ||
     trail.title.length > 160 ||
     !Array.isArray(trail.levels) ||
-    trail.levels.length > MAX_TRAIL_LEVELS
+    trail.levels.length > MAX_TRAIL_LEVELS ||
+    (trail.version === 2 &&
+      (!trail.report ||
+        typeof trail.report !== "object" ||
+        typeof (trail.report as { title?: unknown }).title !== "string" ||
+        (trail.report as { title: string }).title.length > 160 ||
+        typeof (trail.report as { reference?: unknown }).reference !== "string" ||
+        (trail.report as { reference: string }).reference.length > 80))
   )
     return fail();
   const ids = new Set<string>();
@@ -74,7 +90,8 @@ export function validateTrail(value: unknown): ContextTrail {
     )
       return fail();
     ids.add(level.id);
-    if (level.hotspot) {
+    if (level.hotspot !== undefined) {
+      if (!level.hotspot || typeof level.hotspot !== "object") return fail();
       const { x, y, w, h } = level.hotspot;
       if (
         ![x, y, w, h].every(Number.isFinite) ||
@@ -89,6 +106,50 @@ export function validateTrail(value: unknown): ContextTrail {
     }
     if (level.videoTime !== undefined && (!Number.isFinite(level.videoTime) || level.videoTime < 0))
       return fail();
+    const annotations = (level as TrailLevel & { annotations?: unknown }).annotations ?? [];
+    if (!Array.isArray(annotations) || annotations.length > MAX_TRAIL_ANNOTATIONS) return fail();
+    const annotationIds = new Set<string>();
+    const cleanAnnotations: Annotation[] = annotations.map((annotation) => {
+      if (
+        !annotation ||
+        typeof annotation !== "object" ||
+        typeof annotation.id !== "string" ||
+        !annotation.id ||
+        annotation.id.length > 100 ||
+        annotationIds.has(annotation.id) ||
+        typeof annotation.label !== "string" ||
+        annotation.label.length > 500 ||
+        !annotation.box ||
+        typeof annotation.box !== "object"
+      )
+        return fail();
+      const { x, y, w, h } = annotation.box;
+      if (
+        ![x, y, w, h].every(Number.isFinite) ||
+        x < 0 ||
+        y < 0 ||
+        w < 0.01 ||
+        h < 0.01 ||
+        x + w > 1.000001 ||
+        y + h > 1.000001 ||
+        (annotation.severity !== undefined &&
+          !["info", "minor", "major"].includes(annotation.severity)) ||
+        (annotation.shape !== undefined && !["box", "ellipse"].includes(annotation.shape)) ||
+        (annotation.kind !== undefined && !["defect", "redact"].includes(annotation.kind))
+      )
+        return fail();
+      annotationIds.add(annotation.id);
+      return {
+        id: annotation.id,
+        label: annotation.label,
+        box: { x, y, w, h },
+        ...(annotation.severity !== undefined
+          ? { severity: annotation.severity as Severity }
+          : {}),
+        ...(annotation.shape !== undefined ? { shape: annotation.shape as Shape } : {}),
+        ...(annotation.kind !== undefined ? { kind: annotation.kind as "defect" | "redact" } : {}),
+      };
+    });
     // Only retain known fields; imported metadata can never become executable markup.
     return {
       id: level.id,
@@ -97,6 +158,7 @@ export function validateTrail(value: unknown): ContextTrail {
       image: level.image,
       width: level.width,
       height: level.height,
+      annotations: cleanAnnotations,
       ...(level.hotspot
         ? {
             hotspot: {
@@ -110,7 +172,17 @@ export function validateTrail(value: unknown): ContextTrail {
       ...(level.videoTime !== undefined ? { videoTime: level.videoTime } : {}),
     };
   });
-  const clean: ContextTrail = { version: 1, title: trail.title, levels };
+  const legacyReport = (trail as ContextTrail & { report?: { title?: unknown; reference?: unknown } })
+    .report;
+  const clean: ContextTrail = {
+    version: 2,
+    title: trail.title,
+    report: {
+      title: trail.version === 1 ? "" : legacyReport!.title as string,
+      reference: trail.version === 1 ? "" : legacyReport!.reference as string,
+    },
+    levels,
+  };
   if (new TextEncoder().encode(JSON.stringify(clean)).byteLength > MAX_TRAIL_BYTES) {
     throw new Error("This trail is too large. Use fewer or smaller photos.");
   }

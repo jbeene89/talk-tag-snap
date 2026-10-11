@@ -12,8 +12,9 @@ import {
   type ContextTrail,
 } from "./context-trail.ts";
 const fixture = (): ContextTrail => ({
-  version: 1,
+  version: 2,
   title: "Pump inspection",
+  report: { title: "North pump inspection", reference: "Unit 4B" },
   levels: [
     {
       id: "wide",
@@ -22,6 +23,15 @@ const fixture = (): ContextTrail => ({
       image: "data:image/jpeg;base64,/9j/",
       width: 1200,
       height: 800,
+      annotations: [
+        {
+          id: "mark-1",
+          label: "Crack at flange",
+          box: { x: 0.4, y: 0.4, w: 0.1, h: 0.08 },
+          severity: "major",
+          shape: "ellipse",
+        },
+      ],
       hotspot: { x: 0.2, y: 0.3, w: 0.2, h: 0.4 },
     },
     {
@@ -31,6 +41,7 @@ const fixture = (): ContextTrail => ({
       image: "data:image/png;base64,AAAA",
       width: 800,
       height: 1200,
+      annotations: [],
       videoTime: 12.4,
     },
   ],
@@ -55,6 +66,17 @@ test("reopens both a draft and its standalone viewer without losing frames or hi
   const t = fixture();
   assert.deepEqual(parseTrail(JSON.stringify(t)), t);
   assert.deepEqual(parseTrail(trailHtml(t)), t);
+});
+test("migrates v1 JSON and HTML to v2 without losing supported legacy fields", () => {
+  const current = fixture();
+  const legacy = {
+    version: 1,
+    title: current.title,
+    levels: current.levels.map(({ annotations: _annotations, ...level }) => level),
+  };
+  const expected = { ...current, report: { title: "", reference: "" }, levels: current.levels.map((level) => ({ ...level, annotations: [] })) };
+  assert.deepEqual(parseTrail(JSON.stringify(legacy)), expected);
+  assert.deepEqual(parseTrail(trailHtml(validateTrail(legacy))), expected);
 });
 test("hostile titles and notes stay in inert data and are rendered as text", () => {
   const t = fixture();
@@ -82,6 +104,15 @@ test("rejects remote images, duplicate ids, invalid coordinates and oversized se
     },
     (t: ContextTrail) => {
       t.levels[1].videoTime = -1;
+    },
+    (t: ContextTrail) => {
+      t.levels[0].annotations[0].box.x = 0.95;
+    },
+    (t: ContextTrail) => {
+      t.levels[0].annotations[0].shape = "arrow" as "box";
+    },
+    (t: ContextTrail) => {
+      t.levels[0].annotations[0].box.w = Number.POSITIVE_INFINITY;
     },
     (t: ContextTrail) => {
       t.levels = Array(MAX_TRAIL_LEVELS + 1).fill(t.levels[0]);
