@@ -10,13 +10,17 @@ function database(): Promise<IDBDatabase> {
       reject(new Error("Draft storage is unavailable. Save a trail file to keep your work."));
   });
 }
-async function transaction(mode: IDBTransactionMode, value?: ContextTrail): Promise<unknown> {
+async function transaction(
+  mode: IDBTransactionMode,
+  value?: ContextTrail,
+  key = "current",
+): Promise<unknown> {
   const db = await database();
   try {
     return await new Promise((resolve, reject) => {
       const tx = db.transaction("drafts", mode);
       const store = tx.objectStore("drafts");
-      const request = mode === "readonly" ? store.get("current") : store.put(value, "current");
+      const request = mode === "readonly" ? store.get(key) : store.put(value, key);
       tx.oncomplete = () => resolve(request.result);
       tx.onerror = () =>
         reject(new Error("Could not save this draft. Save a trail file before closing."));
@@ -37,9 +41,16 @@ export async function loadTrailDraft(): Promise<ContextTrail | null> {
   const value = await transaction("readonly");
   return value ? validateTrail(value) : null;
 }
+export async function loadTrailDraftBackup(): Promise<ContextTrail | null> {
+  const value = await transaction("readonly", undefined, "previous");
+  return value ? validateTrail(value) : null;
+}
 export async function saveTrailDraft(trail: ContextTrail): Promise<void> {
   const write = persistLatest(trail);
   // Loading/closing waits for the latest state, even when intermediate edits coalesce.
   pendingWrite = write.catch(() => {});
   await write;
+}
+export async function saveTrailDraftBackup(trail: ContextTrail): Promise<void> {
+  await transaction("readwrite", validateTrail(trail), "previous");
 }

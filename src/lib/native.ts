@@ -1,7 +1,14 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { App } from "@capacitor/app";
+import { toast } from "sonner";
 
 import { saveImageWithAdapters } from "@/lib/export-image";
 import { shareWithAdapters, type ShareOutcome } from "@/lib/share-image";
+import { validateDocumentExport } from "@/lib/document-export";
+import {
+  createRestoredResultListenerInstaller,
+  DocumentRestoredResultCoordinator,
+} from "@/lib/document-restored-result";
 
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.soupytag.app";
 
@@ -20,6 +27,68 @@ type ExportPlugin = {
 };
 
 const Export = registerPlugin<ExportPlugin>("SoupyExport");
+
+type DocumentPlugin = {
+  addListener: (
+    eventName: "requestRecoveryRequired",
+    listenerFunc: (event: { operation?: string }) => void,
+  ) => Promise<{ remove: () => Promise<void> }>;
+  saveDocument: (options: {
+    base64: string;
+    fileName: string;
+    mimeType: string;
+    requestId: string;
+  }) => Promise<{
+    requestId?: string;
+    ok?: boolean;
+    cancelled?: boolean;
+    fileName?: string;
+    uri?: string;
+  }>;
+  openDocument: (options: { requestId: string }) => Promise<{
+    requestId?: string;
+    ok?: boolean;
+    cancelled?: boolean;
+    base64?: string;
+    fileName?: string;
+    mimeType?: string;
+  }>;
+};
+
+const DocumentPicker = registerPlugin<DocumentPlugin>("SoupyDocument");
+export const documentRestoredResults = new DocumentRestoredResultCoordinator();
+const installRestoredResultListener = createRestoredResultListenerInstaller();
+let recoveryListenerInstallation: Promise<unknown> | null = null;
+
+export function usesNativeDocumentPicker(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
+
+export function initializeDocumentRestoredResults(): Promise<unknown> {
+  if (typeof window === "undefined" || !usesNativeDocumentPicker())
+    return Promise.resolve(undefined);
+  if (!recoveryListenerInstallation) {
+    recoveryListenerInstallation = DocumentPicker.addListener("requestRecoveryRequired", () => {
+      toast.error(
+        "A document result could not be matched. No file was processed; close and reopen TalkTag before retrying.",
+      );
+    }).catch(() => undefined);
+  }
+  return installRestoredResultListener(
+    (listener) => App.addListener("appRestoredResult", listener),
+    (event) => {
+      void documentRestoredResults.acceptRestoredResult(event);
+    },
+  )
+    .then(async (listener) => {
+      await recoveryListenerInstallation;
+      return listener;
+    })
+    .catch(() => {
+      documentRestoredResults.reportListenerFailure();
+      return undefined;
+    });
+}
 
 export async function openStoreListing(): Promise<void> {
   try {
@@ -148,16 +217,57 @@ export async function saveDocument({
 }: {
   blob: Blob;
   fileName: string;
-}): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    const { Filesystem, Directory } = await import("@capacitor/filesystem");
-    await Filesystem.writeFile({
-      path: `SoupyTag/${fileName}`,
-      data: await blobToBase64(blob),
-      directory: Directory.Documents,
-      recursive: true,
-    });
-    return;
+}): Promise<{ cancelled: boolean; success: boolean; fileName: string; location?: string }> {
+  await validateDocumentExport(blob, fileName);
+  if (usesNativeDocumentPicker()) {
+    const requestId = crypto.randomUUID();
+    const outcome = documentRestoredResults.waitFor("saveDocument", requestId);
+    try {
+      const base64 = await blobToBase64(blob);
+      void DocumentPicker.saveDocument({
+        base64,
+        fileName,
+        mimeType: blob.type || "application/octet-stream",
+        requestId,
+      })
+        .then((result) =>
+          documentRestoredResults.acceptPromiseResult("saveDocument", requestId, result),
+        )
+        .catch((error: unknown) => {
+          documentRestoredResults.failRequest("saveDocument", requestId, error);
+        });
+    } catch (error) {
+      documentRestoredResults.failRequest("saveDocument", requestId, error);
+    }
+    const result = await outcome;
+    if (result.operation !== "saveDocument") throw new Error("The save result was invalid.");
+    return {
+      cancelled: result.cancelled,
+      success: result.success,
+      fileName: result.fileName || fileName,
+      ...("location" in result && result.location ? { location: result.location } : {}),
+    };
   }
   downloadBlobInBrowser(blob, fileName);
+  return { cancelled: false, success: true, fileName };
+}
+
+export async function openDocument(): Promise<{ cancelled: boolean; file?: File }> {
+  if (!usesNativeDocumentPicker()) return { cancelled: false };
+  const requestId = crypto.randomUUID();
+  const outcome = documentRestoredResults.waitFor("openDocument", requestId);
+  try {
+    void DocumentPicker.openDocument({ requestId })
+      .then((result) =>
+        documentRestoredResults.acceptPromiseResult("openDocument", requestId, result),
+      )
+      .catch((error: unknown) => {
+        documentRestoredResults.failRequest("openDocument", requestId, error);
+      });
+  } catch (error) {
+    documentRestoredResults.failRequest("openDocument", requestId, error);
+  }
+  const result = await outcome;
+  if (result.operation !== "openDocument") throw new Error("The open result was invalid.");
+  return result;
 }

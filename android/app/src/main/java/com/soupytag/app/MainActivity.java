@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(FirebaseAnalyticsPlugin.class);
         registerPlugin(SoupyReviewPlugin.class);
         registerPlugin(SoupyExportPlugin.class);
+        registerPlugin(SoupyDocumentPlugin.class);
         super.onCreate(savedInstanceState);
         int background = Color.rgb(10, 10, 10);
         getWindow().getDecorView().setBackgroundColor(background);
