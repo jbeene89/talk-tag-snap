@@ -1,6 +1,11 @@
 export type AnalyticsConsent = "unset" | "granted" | "denied";
 export type AnalyticsProvider = "firebase" | "posthog" | "none";
 export type AnalyticsProperties = Record<string, string | number | boolean | null | undefined>;
+export type FirebaseRevocationResult = {
+  configured: boolean;
+  collectionDisabled: boolean;
+  persisted: boolean;
+};
 
 export const ANALYTICS_CONSENT_KEY = "soupytag:analytics:consent:v2";
 export const LEGACY_ANALYTICS_CONSENT_KEY = "soupytag:analytics:consent:v1";
@@ -15,12 +20,39 @@ export function firebaseCollectionEnabled(consent: AnalyticsConsent, configured:
   return configured && consent === "granted";
 }
 
+export function canCaptureFirebaseEvent(
+  consent: AnalyticsConsent,
+  configured: boolean,
+  revocationPending: boolean,
+): boolean {
+  return firebaseCollectionEnabled(consent, configured) && !revocationPending;
+}
+
 export function shouldLogFirebaseAppOpen(
   ready: boolean,
   consent: AnalyticsConsent,
   consentAtStartup: boolean,
 ): boolean {
   return ready && consent === "granted" && consentAtStartup;
+}
+
+export async function revokeFirebaseAnalytics(
+  setConsent: () => Promise<FirebaseRevocationResult>,
+): Promise<FirebaseRevocationResult> {
+  let result: FirebaseRevocationResult = {
+    configured: false,
+    collectionDisabled: false,
+    persisted: false,
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      result = await setConsent();
+      if (result.collectionDisabled && result.persisted) return result;
+    } catch {
+      result = { configured: false, collectionDisabled: false, persisted: false };
+    }
+  }
+  return result;
 }
 
 export function readAnalyticsConsent(storage: Pick<Storage, "getItem">): AnalyticsConsent {

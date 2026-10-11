@@ -111,6 +111,41 @@ export function SettingsDialog({
                 aria-label="Share optional usage analytics"
               />
             </div>
+            {analytics.consentStatus && (
+              <div
+                className="mt-3 flex items-center justify-between gap-3 text-xs leading-5 text-amber-300"
+                role="alert"
+              >
+                <span>
+                  {analytics.consentStatus === "pending"
+                    ? "Blocking events and confirming Firebase is off…"
+                    : analytics.consentStatus === "enabling"
+                      ? "Confirming your Firebase analytics opt-in…"
+                      : analytics.consentStatus === "session-only"
+                        ? "Firebase is off for this session, but the choice could not be saved."
+                        : analytics.consentStatus === "grant-unconfirmed"
+                          ? "Could not confirm the Firebase opt-in; analytics remains blocked."
+                          : analytics.consentStatus === "unavailable"
+                            ? "Firebase is not configured; analytics remains off."
+                            : "Could not confirm Firebase is off. Custom events are blocked; Firebase may still collect automatic events. Retry to confirm."}
+                </span>
+                {analytics.consentStatus !== "pending" &&
+                  analytics.consentStatus !== "enabling" &&
+                  analytics.consentStatus !== "unavailable" && (
+                    <button
+                      type="button"
+                      className="shrink-0 underline"
+                      onClick={() =>
+                        void analytics.setConsent(
+                          analytics.consentStatus === "grant-unconfirmed" ? "granted" : "denied",
+                        )
+                      }
+                    >
+                      Retry
+                    </button>
+                  )}
+              </div>
+            )}
           </div>
 
           <a href="/privacy" className={`${rowClass} no-underline`}>

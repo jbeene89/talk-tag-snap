@@ -3,10 +3,12 @@ import { test } from "node:test";
 import {
   ANALYTICS_CONSENT_KEY,
   LEGACY_ANALYTICS_CONSENT_KEY,
+  canCaptureFirebaseEvent,
   firebaseCollectionEnabled,
   firebaseEvent,
   getAnalyticsProvider,
   readAnalyticsConsent,
+  revokeFirebaseAnalytics,
   shouldLogFirebaseAppOpen,
 } from "./analytics-policy.ts";
 
@@ -63,6 +65,40 @@ test("Firebase starts closed, revokes immediately, and does not backfill on re-c
   assert.equal(shouldLogFirebaseAppOpen(true, "denied", true), false);
   assert.equal(shouldLogFirebaseAppOpen(false, "granted", true), false);
   assert.equal(shouldLogFirebaseAppOpen(true, "granted", true), true);
+  assert.equal(canCaptureFirebaseEvent("granted", true, true), false);
+  assert.equal(canCaptureFirebaseEvent("granted", true, false), true);
+  assert.equal(canCaptureFirebaseEvent("denied", true, false), false);
+});
+
+test("Firebase revocation retries failed bridge calls and unpersisted denials", async () => {
+  let attempts = 0;
+  const recovered = await revokeFirebaseAnalytics(async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("bridge failed before native disable");
+    return { configured: true, collectionDisabled: true, persisted: true };
+  });
+  assert.equal(attempts, 2);
+  assert.deepEqual(recovered, {
+    configured: true,
+    collectionDisabled: true,
+    persisted: true,
+  });
+
+  attempts = 0;
+  const unsaved = await revokeFirebaseAnalytics(async () => {
+    attempts += 1;
+    return { configured: true, collectionDisabled: true, persisted: false };
+  });
+  assert.equal(attempts, 2);
+  assert.equal(unsaved.persisted, false);
+
+  attempts = 0;
+  const notDisabled = await revokeFirebaseAnalytics(async () => {
+    attempts += 1;
+    throw new Error("bridge unavailable");
+  });
+  assert.equal(attempts, 2);
+  assert.equal(notDisabled.collectionDisabled, false);
 });
 
 test("Firebase receives only fixed events and constrained properties", () => {

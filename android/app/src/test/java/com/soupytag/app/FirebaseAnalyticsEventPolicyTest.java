@@ -10,10 +10,26 @@ import org.junit.Test;
 public class FirebaseAnalyticsEventPolicyTest {
     @Test
     public void rejectsEventsBeforeConsentOrWithoutConfiguration() {
-        assertFalse(FirebaseAnalyticsStartup.shouldCollect("unset", true));
-        assertFalse(FirebaseAnalyticsStartup.shouldCollect("denied", true));
-        assertFalse(FirebaseAnalyticsStartup.shouldCollect("granted", false));
-        assertTrue(FirebaseAnalyticsStartup.shouldCollect("granted", true));
+        assertFalse(FirebaseAnalyticsStartup.shouldCollect("unset", true, true));
+        assertFalse(FirebaseAnalyticsStartup.shouldCollect("denied", true, true));
+        assertFalse(FirebaseAnalyticsStartup.shouldCollect("granted", false, true));
+        assertFalse(FirebaseAnalyticsStartup.shouldCollect("granted", true, false));
+        assertTrue(FirebaseAnalyticsStartup.shouldCollect("granted", true, true));
+    }
+
+    @Test
+    public void staleSdkGrantCannotOverrideMissingOrCorruptAppConsent() {
+        assertFalse(FirebaseAnalyticsStartup.shouldInitialize("unset", false, true));
+        assertFalse(FirebaseAnalyticsStartup.shouldInitialize("corrupt", false, true));
+        assertFalse(FirebaseAnalyticsStartup.shouldInitialize("granted", true, true));
+        assertTrue(FirebaseAnalyticsStartup.shouldInitialize("granted", false, true));
+    }
+
+    @Test
+    public void eitherDurableDenialRecordIsSufficientToBlockStartup() {
+        assertTrue(FirebaseAnalyticsStartup.revocationPersisted(true, false));
+        assertTrue(FirebaseAnalyticsStartup.revocationPersisted(false, true));
+        assertFalse(FirebaseAnalyticsStartup.revocationPersisted(false, false));
     }
 
     @Test

@@ -13,6 +13,10 @@ const activity = readFileSync(
 );
 
 test("native Firebase collection and advertising identifiers are disabled by default", () => {
+  assert.match(
+    manifest,
+    /com\.google\.firebase\.provider\.FirebaseInitProvider[\s\S]*?tools:node="remove"/,
+  );
   assert.match(manifest, /firebase_analytics_collection_enabled" android:value="false"/);
   assert.match(
     manifest,
@@ -27,5 +31,18 @@ test("native consent is applied before Capacitor starts the web view", () => {
   assert.ok(
     activity.indexOf("FirebaseAnalyticsStartup.apply(this)") < activity.indexOf("super.onCreate"),
   );
+  const startup = readFileSync(
+    new URL(
+      "../../android/app/src/main/java/com/soupytag/app/FirebaseAnalyticsStartup.java",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(
+    startup,
+    /shouldInitialize\(readConsent\(context\), readRevocation\(context\), hasConfiguration\(context\)\)[\s\S]*?initializeWithConsent\(context\)/,
+  );
+  assert.match(startup, /REVOCATION_PREFERENCES/);
+  assert.match(startup, /getBoolean\(REVOCATION_KEY, true\)/);
   assert.match(activity, /registerPlugin\(FirebaseAnalyticsPlugin\.class\)/);
 });
