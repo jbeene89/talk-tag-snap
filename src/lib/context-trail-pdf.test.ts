@@ -143,7 +143,18 @@ test("wraps a long report reference within the page header", async () => {
     }
   }
   const content = Buffer.concat(decoded).toString("latin1");
-  assert.ok(content.includes("(Reference:"));
-  assert.ok(content.includes("WWWWWWWWWWWWWWWWWW"));
-  assert.ok(!content.includes(`(Reference: ${trail.report.reference}) Tj`));
+  const referenceLines = [...content.matchAll(/\((Reference: )?(W+)\) Tj/g)];
+  assert.equal(referenceLines[0]?.[1], "Reference: ");
+  assert.equal(
+    referenceLines[0]![2].length + referenceLines[1]![2].length,
+    trail.report.reference.length,
+  );
+  assert.equal(referenceLines[2]?.[1], "Reference: ");
+});
+
+test("rejects unsupported Unicode instead of silently omitting it", async () => {
+  const trail = fixture();
+  trail.levels = [trail.levels[0]];
+  trail.levels[0].note = "Synthetic unsupported character 🧬";
+  await assert.rejects(createTrailPdf(trail, testFonts), /U\+1F9EC/);
 });
