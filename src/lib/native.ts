@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 
 import { saveImageWithAdapters } from "@/lib/export-image";
 import { shareWithAdapters, type ShareOutcome } from "@/lib/share-image";
+import { validateDocumentExport } from "@/lib/document-export";
 
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.soupytag.app";
 
@@ -169,6 +170,7 @@ export async function saveDocument({
   blob: Blob;
   fileName: string;
 }): Promise<{ cancelled: boolean; fileName: string; location?: string }> {
+  await validateDocumentExport(blob, fileName);
   if (usesNativeDocumentPicker()) {
     const result = await DocumentPicker.saveDocument({
       base64: await blobToBase64(blob),
