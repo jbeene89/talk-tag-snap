@@ -100,14 +100,15 @@ export function SettingsDialog({
                   <BarChart3 className="h-4 w-4 text-yellow-400" /> Help improve SoupyTag
                 </div>
                 <p className="mt-1 text-xs leading-5 text-neutral-500">
-                  Share anonymous feature usage only. Never photos, labels, prompts, voice, email,
-                  or feedback text.
+                  Optional event data goes to Firebase on Android or PostHog on the web. These
+                  services may receive app or device identifiers. Never photos, labels, voice,
+                  email, or feedback text.
                 </p>
               </div>
               <Switch
                 checked={analytics.consent === "granted"}
                 onCheckedChange={(checked) => analytics.setConsent(checked ? "granted" : "denied")}
-                aria-label="Share anonymous usage analytics"
+                aria-label="Share optional usage analytics"
               />
             </div>
           </div>
