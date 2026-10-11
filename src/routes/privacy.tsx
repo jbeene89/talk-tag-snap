@@ -57,11 +57,19 @@ function PrivacyPage() {
           </PolicySection>
 
           <PolicySection title="Optional product analytics">
-            Analytics is disabled by default. If you opt in, SoupyTag sends anonymous action events
-            to PostHog, such as whether onboarding finished, which tagging method was used, and
-            whether an export succeeded. We disable session replay and automatic interaction
-            capture. Photos, labels, prompts, voice content, email addresses, and feedback messages
-            are never included. You can turn analytics off in Settings at any time.
+            Analytics is disabled by default. On Android, it stays disabled in the native Firebase
+            SDK until you opt in in Settings; the first-use event is not backfilled, and opting in
+            is not reported as an install. While enabled, Android sends app-open, tag-created, and
+            successful-export events with only fixed action types and limited counts. Firebase may
+            also collect its standard app lifecycle and engagement events, an app-instance
+            identifier, app/device/OS details, and network information such as IP address. Android
+            advertising-ID collection and ad storage, ad-user-data, and ad-personalization consent
+            are disabled. The web app uses PostHog instead, with session replay, automatic
+            interaction capture, and exception capture disabled; it uses a pseudonymous installation
+            identifier. These providers do not receive photos, image content, audio, transcripts,
+            notes, report text, filenames, paths, URLs, labels, or raw errors. Your existing
+            analytics choice does not authorize sending data to a new provider: Android asks you to
+            opt in again for Firebase. You can turn analytics off in Settings at any time.
           </PolicySection>
 
           <PolicySection title="Feedback">
@@ -84,7 +92,8 @@ function PrivacyPage() {
           <PolicySection title="Your choices">
             You can clear locally stored SoupyTag data through Android settings, disable analytics
             inside the app, omit contact details from feedback, or request deletion of submitted
-            feedback by emailing us.
+            feedback by emailing us. Turning analytics off stops future collection; it cannot recall
+            events already transmitted to an analytics provider.
           </PolicySection>
 
           <PolicySection title="Children and changes">

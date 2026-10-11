@@ -37,7 +37,8 @@ Snap a photo (or grab a frame from a video), mark the exact problem, describe it
 
 - The manual capture, tagging, description, save, and share flow does not send photos to an AI service.
 - If optional AI returns, photos will be processed only after an explicit AI action and will not be stored by SoupyTag.
-- No accounts, no tracking, no analytics on photo content.
+- No accounts and no analytics on photo content. Optional usage analytics is off until enabled in
+  Settings; see [`docs/ANDROID_ANALYTICS.md`](docs/ANDROID_ANALYTICS.md).
 - Full policy: `/privacy` route in the app.
 
 ---
