@@ -5,13 +5,14 @@ final class DocumentRequestGate {
     private String activeRequestId;
 
     synchronized boolean begin(String method, String requestId) {
-        if (activeMethod != null) return false;
+        if (method == null || requestId == null || activeMethod != null) return false;
         activeMethod = method;
         activeRequestId = requestId;
         return true;
     }
 
     synchronized boolean correlate(String method, String requestId) {
+        if (method == null || requestId == null) return false;
         if (activeMethod == null) {
             activeMethod = method;
             activeRequestId = requestId;
@@ -26,14 +27,9 @@ final class DocumentRequestGate {
         return true;
     }
 
-    synchronized boolean finishUncorrelatedCallback(String method) {
-        if (activeMethod == null || !activeMethod.equals(method)) return false;
-        clear();
-        return true;
-    }
-
     private boolean matches(String method, String requestId) {
-        return method.equals(activeMethod) && requestId != null && requestId.equals(activeRequestId);
+        return method != null && requestId != null &&
+            method.equals(activeMethod) && requestId.equals(activeRequestId);
     }
 
     private void clear() {

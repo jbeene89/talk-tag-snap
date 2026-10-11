@@ -398,29 +398,35 @@ public class SoupyDocumentPlugin extends Plugin {
         if (REQUEST_GATE.finish(method, requestId)) PICKER_IN_PROGRESS.set(false);
     }
 
-    private void finishUncorrelatedPicker(String method) {
-        if (REQUEST_GATE.finishUncorrelatedCallback(method)) PICKER_IN_PROGRESS.set(false);
-    }
-
     private boolean validatePickerCallback(PluginCall call, String method) {
         if (call == null) {
-            finishUncorrelatedPicker(method);
+            notifyPickerRecoveryRequired(method);
             return false;
         }
         if (!"SoupyDocument".equals(call.getPluginId()) || !method.equals(call.getMethodName())) {
+            notifyPickerRecoveryRequired(method);
             return false;
         }
 
         String requestId = tokenRequestId(call);
         if (!isValidRequestId(requestId)) {
-            finishUncorrelatedPicker(method);
+            notifyPickerRecoveryRequired(method);
             call.resolve(requestResult((String) null, false, false,
                 method.equals("openDocument") ? "open_failed" : "save_failed"));
             return false;
         }
-        if (!REQUEST_GATE.correlate(method, requestId)) return false;
+        if (!REQUEST_GATE.correlate(method, requestId)) {
+            notifyPickerRecoveryRequired(method);
+            return false;
+        }
         PICKER_IN_PROGRESS.set(true);
         return true;
+    }
+
+    private void notifyPickerRecoveryRequired(String method) {
+        JSObject notice = new JSObject();
+        notice.put("operation", method);
+        notifyListeners("requestRecoveryRequired", notice);
     }
 
     private JSObject requestResult(PluginCall call, boolean cancelled, boolean ok, String errorCode) {

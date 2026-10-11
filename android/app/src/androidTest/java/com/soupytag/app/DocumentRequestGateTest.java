@@ -11,7 +11,7 @@ public class DocumentRequestGateTest {
         DocumentRequestGate gate = new DocumentRequestGate();
         assertTrue(gate.begin("saveDocument", "save-request"));
 
-        assertFalse(gate.finishUncorrelatedCallback("openDocument"));
+        assertFalse(gate.finish("openDocument", null));
         assertFalse(gate.begin("openDocument", "next-open"));
         assertFalse(gate.finish("saveDocument", "wrong-request"));
         assertTrue(gate.finish("saveDocument", "save-request"));
@@ -20,12 +20,27 @@ public class DocumentRequestGateTest {
     }
 
     @Test
-    public void nullOrMissingRequestOnItsCallbackReleasesOnlyThatOperation() {
+    public void staleNullCallbackCannotReleaseANewerRequestOfTheSameMethod() {
         DocumentRequestGate gate = new DocumentRequestGate();
-        assertTrue(gate.begin("openDocument", "open-request"));
+        assertTrue(gate.begin("openDocument", "open-a"));
+        assertTrue(gate.finish("openDocument", "open-a"));
+        assertTrue(gate.begin("openDocument", "open-b"));
 
         assertFalse(gate.correlate("openDocument", null));
-        assertTrue(gate.finishUncorrelatedCallback("openDocument"));
+        assertFalse(gate.finish("openDocument", null));
+        assertFalse(gate.begin("saveDocument", "save-c"));
+        assertFalse(gate.finish("openDocument", "open-a"));
+        assertFalse(gate.finish("openDocument", "wrong-id"));
+        assertTrue(gate.finish("openDocument", "open-b"));
+        assertTrue(gate.begin("saveDocument", "save-c"));
+        assertTrue(gate.finish("saveDocument", "save-c"));
+    }
+
+    @Test
+    public void missingRequestCannotBecomeAnOwner() {
+        DocumentRequestGate gate = new DocumentRequestGate();
+        assertFalse(gate.begin("openDocument", null));
+        assertFalse(gate.correlate("openDocument", null));
         assertTrue(gate.begin("saveDocument", "next-save"));
         assertTrue(gate.finish("saveDocument", "next-save"));
     }

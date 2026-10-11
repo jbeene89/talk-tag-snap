@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App } from "@capacitor/app";
+import { toast } from "sonner";
 
 import { saveImageWithAdapters } from "@/lib/export-image";
 import { shareWithAdapters, type ShareOutcome } from "@/lib/share-image";
@@ -28,6 +29,10 @@ type ExportPlugin = {
 const Export = registerPlugin<ExportPlugin>("SoupyExport");
 
 type DocumentPlugin = {
+  addListener: (
+    eventName: "requestRecoveryRequired",
+    listenerFunc: (event: { operation?: string }) => void,
+  ) => Promise<{ remove: () => Promise<void> }>;
   saveDocument: (options: {
     base64: string;
     fileName: string;
@@ -53,6 +58,7 @@ type DocumentPlugin = {
 const DocumentPicker = registerPlugin<DocumentPlugin>("SoupyDocument");
 export const documentRestoredResults = new DocumentRestoredResultCoordinator();
 const installRestoredResultListener = createRestoredResultListenerInstaller();
+let recoveryListenerInstallation: Promise<unknown> | null = null;
 
 export function usesNativeDocumentPicker(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
@@ -61,15 +67,27 @@ export function usesNativeDocumentPicker(): boolean {
 export function initializeDocumentRestoredResults(): Promise<unknown> {
   if (typeof window === "undefined" || !usesNativeDocumentPicker())
     return Promise.resolve(undefined);
+  if (!recoveryListenerInstallation) {
+    recoveryListenerInstallation = DocumentPicker.addListener("requestRecoveryRequired", () => {
+      toast.error(
+        "A document result could not be matched. No file was processed; close and reopen TalkTag before retrying.",
+      );
+    }).catch(() => undefined);
+  }
   return installRestoredResultListener(
     (listener) => App.addListener("appRestoredResult", listener),
     (event) => {
       void documentRestoredResults.acceptRestoredResult(event);
     },
-  ).catch(() => {
-    documentRestoredResults.reportListenerFailure();
-    return undefined;
-  });
+  )
+    .then(async (listener) => {
+      await recoveryListenerInstallation;
+      return listener;
+    })
+    .catch(() => {
+      documentRestoredResults.reportListenerFailure();
+      return undefined;
+    });
 }
 
 export async function openStoreListing(): Promise<void> {
