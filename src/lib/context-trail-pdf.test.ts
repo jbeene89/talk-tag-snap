@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
+import { jsPDF } from "jspdf";
 import { createTrailPdf } from "./context-trail-pdf.ts";
 import type { ContextTrail } from "./context-trail.ts";
 
@@ -148,8 +149,26 @@ test("exports ten-plus marks at the right photo edge without clipping badge text
   for (let index = 1; index <= 12; index++) {
     assert.ok(content.includes(`Right-edge annotation ${index}`), `missing mark ${index}`);
   }
-  assert.ok(content.includes("(10) Tj"));
-  assert.ok(content.includes("(12) Tj"));
+  const metricDoc = new jsPDF({ unit: "pt", format: "a4" });
+  const fonts = await testFonts();
+  metricDoc.addFileToVFS("DejaVuSans.ttf", fonts.latin);
+  metricDoc.addFont("DejaVuSans.ttf", "TrailDejaVu", "normal");
+  metricDoc.setFont("TrailDejaVu", "normal");
+  metricDoc.setFontSize(9);
+  const badgePositions = [...content.matchAll(/([0-9.]+) ([0-9.]+) Td\r?\n\((\d{1,2})\) Tj/g)]
+    .filter((match) => Number(match[1]) > 500)
+    .map((match) => ({ number: match[3], x: Number(match[1]) }));
+  assert.deepEqual(
+    badgePositions.map(({ number }) => Number(number)).sort((a, b) => a - b),
+    Array.from({ length: 12 }, (_, index) => index + 1),
+  );
+  for (const { number, x } of badgePositions) {
+    assert.ok(x >= 40, `badge ${number} starts outside the left content margin`);
+    assert.ok(
+      x + metricDoc.getTextWidth(number) <= 572,
+      `badge ${number} ends outside the right content margin`,
+    );
+  }
 });
 
 test("renders and maps valid CJK, arrow, bullet and Greek report text", async () => {
