@@ -5,6 +5,8 @@ import android.content.ContentResolver;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.util.Log;
 
@@ -20,11 +22,13 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.RejectedExecutionException;
 
 @CapacitorPlugin(name = "SoupyDocument")
 public class SoupyDocumentPlugin extends Plugin {
     private static final String TAG = "SoupyDocument";
     private static final AtomicBoolean PICKER_IN_PROGRESS = new AtomicBoolean(false);
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @PluginMethod
     public void saveDocument(PluginCall call) {
@@ -33,64 +37,136 @@ public class SoupyDocumentPlugin extends Plugin {
             return;
         }
 
+        try {
+            DocumentIo.execute(() -> stageAndLaunchPicker(call));
+        } catch (RejectedExecutionException error) {
+            PICKER_IN_PROGRESS.set(false);
+            call.reject("Another document operation is still finishing. Try again.");
+        }
+    }
+
+    private void stageAndLaunchPicker(PluginCall call) {
         String stage = "validate";
-        String token = null;
         DocumentPayload.Staged staged = null;
         try {
-            String fileName = call.getString("fileName");
+            String fileName = DocumentPayload.validateFileName(
+                call.getString("fileName"),
+                call.getString("mimeType")
+            );
             String mimeType = call.getString("mimeType");
             String base64 = call.getString("base64");
-            fileName = DocumentPayload.validateFileName(fileName, mimeType);
             File directory = stagingDirectory();
             DocumentPayload.cleanupStale(directory, System.currentTimeMillis());
 
             stage = "stage";
             staged = DocumentPayload.stage(directory, base64, fileName, mimeType);
-            token = staged.token;
-
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType(staged.mimeType);
-            intent.putExtra(Intent.EXTRA_TITLE, fileName);
-
+            DocumentPayload.Staged ready = staged;
             while (call.getData().length() > 0) call.getData().remove(call.getData().keys().next());
-            call.getData().put("stagedToken", token);
-            Log.i(TAG, "stage=ready bytes=" + staged.length + " mime=" + staged.mimeType);
-            startActivityForResult(call, intent, "saveDocumentResult");
+            call.getData().put("stagedToken", ready.token);
+            Log.i(TAG, "stage=ready bytes=" + ready.length + " mime=" + ready.mimeType);
+            mainHandler.post(() -> launchSavePicker(call, ready, fileName));
         } catch (Exception error) {
             DocumentPayload.cleanup(staged);
-            if (staged == null) DocumentPayload.cleanup(stagingDirectory(), token);
-            PICKER_IN_PROGRESS.set(false);
             String bytes = error instanceof DocumentPayload.StagingException
                 ? Long.toString(((DocumentPayload.StagingException) error).bytes)
                 : "unknown";
             Log.w(TAG, "stage=" + stage + " bytes=" + bytes + " error=" + error.getClass().getSimpleName());
-            call.reject("Could not prepare the document for saving.");
+            mainHandler.post(() -> {
+                PICKER_IN_PROGRESS.set(false);
+                call.reject("Could not prepare the document for saving.");
+            });
+        }
+    }
+
+    private void launchSavePicker(PluginCall call, DocumentPayload.Staged staged, String fileName) {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(staged.mimeType);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+        try {
+            startActivityForResult(call, intent, "saveDocumentResult");
+        } catch (Exception error) {
+            Log.w(TAG, "stage=picker bytes=" + staged.length + " error=" + error.getClass().getSimpleName());
+            try {
+                DocumentIo.execute(() -> {
+                    DocumentPayload.cleanup(staged);
+                    PICKER_IN_PROGRESS.set(false);
+                });
+            } catch (RejectedExecutionException rejected) {
+                PICKER_IN_PROGRESS.set(false);
+            }
+            call.reject("Could not open the document picker.");
         }
     }
 
     @ActivityCallback
     private void saveDocumentResult(PluginCall call, ActivityResult result) {
-        File directory = stagingDirectory();
         String token = call == null ? null : call.getString("stagedToken");
+        if (result.getResultCode() != Activity.RESULT_OK) {
+            boolean cancelled = result.getResultCode() == Activity.RESULT_CANCELED;
+            finishSaveWithoutDestination(call, token, cancelled);
+            return;
+        }
+
+        Uri uri = result.getData() == null ? null : result.getData().getData();
+        if (uri == null) {
+            finishSaveWithoutDestination(call, token, false);
+            return;
+        }
+        int resultCode = result.getResultCode();
+        try {
+            DocumentIo.execute(() -> writeAndVerify(call, resultCode, token, uri));
+        } catch (RejectedExecutionException error) {
+            Log.w(TAG, "stage=queue bytes=unknown error=" + error.getClass().getSimpleName());
+            finishSaveWithoutDestination(call, token, false);
+        }
+    }
+
+    private void finishSaveWithoutDestination(PluginCall call, String token, boolean cancelled) {
+        try {
+            DocumentIo.execute(() -> {
+                DocumentPayload.cleanup(stagingDirectory(), token);
+                mainHandler.post(() -> {
+                    if (cancelled && call != null) {
+                        Log.i(TAG, "stage=cancelled bytes=0");
+                        JSObject response = new JSObject();
+                        response.put("cancelled", true);
+                        call.resolve(response);
+                    } else if (call != null) {
+                        call.reject("The system picker did not return a saved document.");
+                    }
+                    PICKER_IN_PROGRESS.set(false);
+                });
+            });
+        } catch (RejectedExecutionException error) {
+            mainHandler.post(() -> {
+                if (cancelled && call != null) {
+                    JSObject response = new JSObject();
+                    response.put("cancelled", true);
+                    call.resolve(response);
+                } else if (call != null) {
+                    call.reject("The system picker did not return a saved document.");
+                }
+                PICKER_IN_PROGRESS.set(false);
+            });
+        }
+    }
+
+    private void writeAndVerify(PluginCall call, int resultCode, String token, Uri uri) {
         DocumentPayload.Staged staged = null;
-        Uri uri = null;
+        boolean restoredRequest = false;
+        boolean writeAttempted = false;
         String stage = "restore";
         try {
-            if (result.getResultCode() == Activity.RESULT_CANCELED) {
-                DocumentPayload.cleanup(directory, token);
-                Log.i(TAG, "stage=cancelled bytes=0");
-                JSObject response = new JSObject();
-                response.put("cancelled", true);
-                call.resolve(response);
-                return;
-            }
-            uri = result.getData() == null ? null : result.getData().getData();
-            if (uri == null) throw new IllegalStateException("The system picker returned no document.");
-
-            staged = DocumentPayload.restore(directory, token);
+            if (resultCode != Activity.RESULT_OK)
+                throw new IllegalStateException("The document picker did not confirm a new destination.");
+            if (call == null || !isValidToken(token))
+                throw new IllegalStateException("The staged save request is invalid.");
+            staged = DocumentPayload.restore(stagingDirectory(), token);
+            restoredRequest = true;
             ContentResolver resolver = getContext().getContentResolver();
             stage = "write";
+            writeAttempted = true;
             long copied;
             try (OutputStream output = resolver.openOutputStream(uri, "w")) {
                 if (output == null) throw new IllegalStateException("The selected location could not be opened.");
@@ -114,16 +190,21 @@ public class SoupyDocumentPlugin extends Plugin {
             if (!verifiedByReadback && reportedSize != staged.length)
                 throw new IllegalStateException("The selected location could not confirm the complete document.");
 
-            JSObject response = new JSObject();
-            response.put("cancelled", false);
-            response.put("uri", uri.toString());
-            response.put("fileName", displayName(uri));
-            response.put("bytes", staged.length);
-            call.resolve(response);
-            Log.i(TAG, "stage=saved bytes=" + staged.length + " verified=" +
-                (verifiedByReadback ? "readback" : "provider-size"));
+            String savedName = displayName(uri);
+            long savedBytes = staged.length;
+            boolean readbackVerified = verifiedByReadback;
+            mainHandler.post(() -> {
+                JSObject response = new JSObject();
+                response.put("cancelled", false);
+                response.put("uri", uri.toString());
+                response.put("fileName", savedName);
+                response.put("bytes", savedBytes);
+                call.resolve(response);
+                Log.i(TAG, "stage=saved bytes=" + savedBytes + " verified=" +
+                    (readbackVerified ? "readback" : "provider-size"));
+            });
         } catch (Exception error) {
-            if (uri != null) {
+            if (DocumentPayload.mayDeleteDestination(resultCode, restoredRequest, writeAttempted)) {
                 try {
                     getContext().getContentResolver().delete(uri, null, null);
                 } catch (Exception ignored) {
@@ -132,11 +213,13 @@ public class SoupyDocumentPlugin extends Plugin {
             }
             Log.w(TAG, "stage=" + stage + " bytes=" +
                 (staged == null ? "unknown" : staged.length) + " error=" + error.getClass().getSimpleName());
-            if (call != null) call.reject("Could not verify the saved document. The export was not confirmed.");
+            mainHandler.post(() -> {
+                if (call != null) call.reject("Could not verify the saved document. The export was not confirmed.");
+            });
         } finally {
             DocumentPayload.cleanup(staged);
-            if (staged == null) DocumentPayload.cleanup(directory, token);
-            PICKER_IN_PROGRESS.set(false);
+            if (staged == null) DocumentPayload.cleanup(stagingDirectory(), token);
+            mainHandler.post(() -> PICKER_IN_PROGRESS.set(false));
         }
     }
 
@@ -146,6 +229,10 @@ public class SoupyDocumentPlugin extends Plugin {
             call.reject("A document picker is already in progress.");
             return;
         }
+        mainHandler.post(() -> launchOpenPicker(call));
+    }
+
+    private void launchOpenPicker(PluginCall call) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
@@ -153,6 +240,7 @@ public class SoupyDocumentPlugin extends Plugin {
         try {
             startActivityForResult(call, intent, "openDocumentResult");
         } catch (Exception error) {
+            Log.w(TAG, "stage=open-picker bytes=0 error=" + error.getClass().getSimpleName());
             PICKER_IN_PROGRESS.set(false);
             call.reject("Could not open the document picker.");
         }
@@ -160,39 +248,68 @@ public class SoupyDocumentPlugin extends Plugin {
 
     @ActivityCallback
     private void openDocumentResult(PluginCall call, ActivityResult result) {
-        try {
-            if (result.getResultCode() == Activity.RESULT_CANCELED) {
-                JSObject response = new JSObject();
-                response.put("cancelled", true);
-                call.resolve(response);
-                return;
-            }
-            Uri uri = result.getData() == null ? null : result.getData().getData();
-            if (uri == null) {
-                call.reject("The system picker did not return a document location");
-                return;
-            }
-            try (InputStream input = getContext().getContentResolver().openInputStream(uri);
-                 java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
-                if (input == null) throw new IllegalStateException("Could not open selected document");
-                byte[] buffer = new byte[8192];
-                int count;
-                while ((count = input.read(buffer)) != -1) {
-                    if (output.size() + count > DocumentPayload.MAX_TRAIL_BYTES)
-                        throw new IllegalArgumentException("Choose a trail file smaller than 13 MB.");
-                    output.write(buffer, 0, count);
+        if (result.getResultCode() != Activity.RESULT_OK) {
+            mainHandler.post(() -> {
+                if (result.getResultCode() == Activity.RESULT_CANCELED && call != null) {
+                    JSObject response = new JSObject();
+                    response.put("cancelled", true);
+                    call.resolve(response);
+                } else if (call != null) {
+                    call.reject("The document picker did not return a selected file.");
                 }
-                JSObject response = new JSObject();
-                response.put("cancelled", false);
-                response.put("base64", android.util.Base64.encodeToString(output.toByteArray(), android.util.Base64.NO_WRAP));
-                response.put("fileName", displayName(uri));
-                response.put("mimeType", getContext().getContentResolver().getType(uri));
-                call.resolve(response);
+                PICKER_IN_PROGRESS.set(false);
+            });
+            return;
+        }
+
+        Uri uri = result.getData() == null ? null : result.getData().getData();
+        if (uri == null) {
+            mainHandler.post(() -> {
+                if (call != null) call.reject("The system picker did not return a document location.");
+                PICKER_IN_PROGRESS.set(false);
+            });
+            return;
+        }
+        try {
+            DocumentIo.execute(() -> readOpenedDocument(call, uri));
+        } catch (RejectedExecutionException error) {
+            Log.w(TAG, "stage=open-queue bytes=0 error=" + error.getClass().getSimpleName());
+            mainHandler.post(() -> {
+                if (call != null) call.reject("Another document operation is still finishing. Try again.");
+                PICKER_IN_PROGRESS.set(false);
+            });
+        }
+    }
+
+    private void readOpenedDocument(PluginCall call, Uri uri) {
+        try (InputStream input = getContext().getContentResolver().openInputStream(uri);
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            if (input == null) throw new IllegalStateException("Could not open selected document");
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                if (output.size() + count > DocumentPayload.MAX_TRAIL_BYTES)
+                    throw new IllegalArgumentException("Choose a trail file smaller than 13 MB.");
+                output.write(buffer, 0, count);
             }
-        } catch (Exception error) {
-            if (call != null) call.reject("Could not open the selected document");
-        } finally {
+            String base64 = android.util.Base64.encodeToString(output.toByteArray(), android.util.Base64.NO_WRAP);
+            String name = displayName(uri);
+            String mimeType = getContext().getContentResolver().getType(uri);
+            long bytes = output.size();
+            JSObject response = new JSObject();
+            response.put("cancelled", false);
+            response.put("base64", base64);
+            response.put("fileName", name);
+            response.put("mimeType", mimeType);
+            call.resolve(response);
+            Log.i(TAG, "stage=open-read bytes=" + bytes + " mime=" + mimeType);
             PICKER_IN_PROGRESS.set(false);
+        } catch (Exception error) {
+            Log.w(TAG, "stage=open-read bytes=unknown error=" + error.getClass().getSimpleName());
+            mainHandler.post(() -> {
+                if (call != null) call.reject("Could not open the selected document.");
+                PICKER_IN_PROGRESS.set(false);
+            });
         }
     }
 
@@ -220,5 +337,9 @@ public class SoupyDocumentPlugin extends Plugin {
         } catch (Exception ignored) {
         }
         return uri.getLastPathSegment();
+    }
+
+    private boolean isValidToken(String token) {
+        return token != null && token.matches("[0-9a-fA-F-]{36}");
     }
 }

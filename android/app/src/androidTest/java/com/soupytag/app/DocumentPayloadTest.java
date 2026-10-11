@@ -7,6 +7,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
+import android.app.Activity;
 import android.util.Base64;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -22,6 +23,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
 public class DocumentPayloadTest {
@@ -112,6 +116,59 @@ public class DocumentPayloadTest {
         DocumentPayload.cleanup(directory, staged.token);
         assertFalse(staged.dataFile.exists());
         assertFalse(staged.metadataFile.exists());
+    }
+
+    @Test
+    public void slowProviderWorkRunsOffMainAndExecutorQueueIsBounded() throws Exception {
+        CountDownLatch slowProviderEntered = new CountDownLatch(1);
+        CountDownLatch releaseSlowProvider = new CountDownLatch(1);
+        CountDownLatch queuedWorkFinished = new CountDownLatch(1);
+        DocumentIo.execute(() -> {
+            slowProviderEntered.countDown();
+            try {
+                releaseSlowProvider.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertTrue(slowProviderEntered.await(2, TimeUnit.SECONDS));
+
+        DocumentIo.execute(queuedWorkFinished::countDown);
+        assertThrows(RejectedExecutionException.class, () -> DocumentIo.execute(() -> {}));
+
+        CountDownLatch mainThreadResponsive = new CountDownLatch(1);
+        long startedAt = System.nanoTime();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(mainThreadResponsive::countDown);
+        assertTrue(mainThreadResponsive.await(1, TimeUnit.SECONDS));
+        assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt) < 1000);
+
+        releaseSlowProvider.countDown();
+        assertTrue(queuedWorkFinished.await(2, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void destinationCleanupRequiresSuccessfulResultRestoredRequestAndWriteAttempt() {
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_CANCELED, true, true));
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, false, true));
+        assertFalse(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, false));
+        assertTrue(DocumentPayload.mayDeleteDestination(Activity.RESULT_OK, true, true));
+    }
+
+    @Test
+    public void stagedRequestCanBeRestoredAfterPickerLifecycleRecreation() throws Exception {
+        File directory = stagingDirectory();
+        String pdf = "%PDF-1.7\nlifecycle fixture\n%%EOF";
+        DocumentPayload.Staged original = DocumentPayload.stage(
+            directory,
+            Base64.encodeToString(pdf.getBytes(StandardCharsets.US_ASCII), Base64.NO_WRAP),
+            "lifecycle.pdf",
+            "application/pdf"
+        );
+
+        DocumentPayload.Staged afterRecreation = DocumentPayload.restore(directory, original.token);
+        assertEquals(original.token, afterRecreation.token);
+        assertEquals(original.length, afterRecreation.length);
+        DocumentPayload.cleanup(afterRecreation);
     }
 
     private File stagingDirectory() {

@@ -1,5 +1,6 @@
 package com.soupytag.app;
 
+import android.app.Activity;
 import android.util.Base64;
 import android.util.Base64InputStream;
 
@@ -250,6 +251,10 @@ final class DocumentPayload {
             if (file.isFile() && nowMillis - file.lastModified() > 24L * 60 * 60 * 1000)
                 file.delete();
         }
+    }
+
+    static boolean mayDeleteDestination(int resultCode, boolean restoredRequest, boolean writeAttempted) {
+        return resultCode == Activity.RESULT_OK && restoredRequest && writeAttempted;
     }
 
     private static long maxBytesFor(String mimeType) throws IOException {
