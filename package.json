@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "build:mobile": "node scripts/build-mobile.mjs",
     "sync:android": "node scripts/build-mobile.mjs --sync",
-    "test": "node --test src/lib/annotations.test.ts src/lib/detection-guards.test.ts src/lib/export-image.test.ts src/lib/onboarding.test.ts src/lib/prefs.test.ts src/lib/session-persistence.test.ts src/lib/share-image.test.ts src/lib/image-import.test.ts src/lib/context-trail.test.ts src/lib/latest-writer.test.ts",
+    "test": "node --test src/lib/annotations.test.ts src/lib/detection-guards.test.ts src/lib/export-image.test.ts src/lib/onboarding.test.ts src/lib/prefs.test.ts src/lib/session-persistence.test.ts src/lib/share-image.test.ts src/lib/image-import.test.ts src/lib/context-trail.test.ts src/lib/context-trail-pdf.test.ts src/lib/latest-writer.test.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write ."
@@ -73,6 +73,7 @@
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.575.0",
     "nitro": "3.0.260603-beta",
     "posthog-node": "^5.38.0",

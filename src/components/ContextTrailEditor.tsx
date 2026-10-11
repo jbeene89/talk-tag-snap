@@ -6,6 +6,7 @@ import {
   Camera,
   Check,
   Download,
+  FileText,
   ImagePlus,
   Layers,
   Loader2,
@@ -21,6 +22,7 @@ import {
   levelLabel,
   MAX_TRAIL_FILE_BYTES,
   MAX_TRAIL_LEVELS,
+  MAX_TRAIL_ANNOTATIONS,
   normalizedBox,
   parseTrail,
   trailHtml,
@@ -29,8 +31,14 @@ import {
   type TrailBox,
   type TrailLevel,
 } from "@/lib/context-trail";
-import { loadTrailDraft, saveTrailDraft } from "@/lib/context-trail-storage";
-import { saveDocument, shareImage } from "@/lib/native";
+import {
+  loadTrailDraft,
+  loadTrailDraftBackup,
+  saveTrailDraft,
+  saveTrailDraftBackup,
+} from "@/lib/context-trail-storage";
+import { openDocument, saveDocument, shareImage, usesNativeDocumentPicker } from "@/lib/native";
+import { createTrailPdf } from "@/lib/context-trail-pdf";
 import type { Annotation } from "@/lib/annotations";
 import "./context-trail.css";
 
@@ -38,9 +46,18 @@ type Props = {
   onClose: () => void;
   initialImage?: string | null;
   initialAnnotations?: Annotation[];
+  initialReport?: { title: string; reference: string };
 };
 type Point = { x: number; y: number };
-const emptyTrail = (): ContextTrail => ({ version: 1, title: "", levels: [] });
+const emptyTrail = (): ContextTrail => ({
+  version: 2,
+  title: "",
+  report: { title: "", reference: "" },
+  levels: [],
+});
+const hasTrailWork = (trail: ContextTrail) =>
+  Boolean(trail.title.trim() || trail.report.title.trim() || trail.report.reference.trim()) ||
+  trail.levels.length > 0;
 
 async function prepareImage(
   url: string,
@@ -76,7 +93,23 @@ async function prepareImage(
   };
 }
 
-export function ContextTrailEditor({ onClose, initialImage, initialAnnotations = [] }: Props) {
+async function redactStoredPhotos(trail: ContextTrail): Promise<ContextTrail> {
+  const levels = await Promise.all(
+    trail.levels.map(async (level) => {
+      if (!level.annotations.some((annotation) => annotation.kind === "redact")) return level;
+      const photo = await prepareImage(level.image, level.annotations);
+      return { ...level, ...photo };
+    }),
+  );
+  return { ...trail, levels };
+}
+
+export function ContextTrailEditor({
+  onClose,
+  initialImage,
+  initialAnnotations = [],
+  initialReport = { title: "", reference: "" },
+}: Props) {
   const [trail, setTrail] = useState<ContextTrail>(emptyTrail);
   const [hydrated, setHydrated] = useState(false);
   const [active, setActive] = useState(0);
@@ -91,6 +124,8 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   const [videoAt, setVideoAt] = useState(0);
   const [videoPicked, setVideoPicked] = useState(0);
   const [newPrompt, setNewPrompt] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [hasBackup, setHasBackup] = useState(false);
   const start = useRef<Point | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -100,7 +135,12 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   const importInput = useRef<HTMLInputElement>(null);
   const trailRef = useRef(trail);
   const importBusy = useRef(false);
-  const initialRef = useRef({ image: initialImage, annotations: initialAnnotations });
+  const actionBusy = useRef(false);
+  const initialRef = useRef({
+    image: initialImage,
+    annotations: initialAnnotations,
+    report: initialReport,
+  });
   const returnFocus = useRef<HTMLElement | null>(
     typeof document === "undefined" ? null : (document.activeElement as HTMLElement),
   );
@@ -121,6 +161,13 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
       }
       try {
         let next = saved ?? emptyTrail();
+        if (saved) {
+          const previous = await loadTrailDraftBackup();
+          if (previous && !cancelled) setHasBackup(true);
+          next = await redactStoredPhotos(saved);
+        } else {
+          next.report = { ...initialRef.current.report };
+        }
         if (!next.levels.length && initialRef.current.image) {
           const photo = await prepareImage(
             initialRef.current.image,
@@ -128,7 +175,15 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
           );
           next = {
             ...next,
-            levels: [{ ...photo, id: crypto.randomUUID(), title: "Where", note: "" }],
+            levels: [
+              {
+                ...photo,
+                id: crypto.randomUUID(),
+                title: "Where",
+                note: "",
+                annotations: initialRef.current.annotations.map((a) => structuredClone(a)),
+              },
+            ],
           };
         }
         if (!cancelled) {
@@ -154,7 +209,7 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
     setStatus("Saving draft…");
     void saveTrailDraft(trail)
       .then(() => {
-        if (!cancelled) setStatus("Draft saved on this device");
+        if (!cancelled) setStatus("Autosaved working draft on this device");
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -167,8 +222,20 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
     };
   }, [trail, hydrated]);
 
+  useEffect(() => {
+    const input = importInput.current;
+    if (!input) return;
+    const handleCancel = () => {
+      actionBusy.current = false;
+      setBusy(false);
+      setStatus("Open cancelled; current draft kept");
+    };
+    input.addEventListener("cancel", handleCancel);
+    return () => input.removeEventListener("cancel", handleCancel);
+  }, []);
+
   async function close() {
-    if (busy) return;
+    if (busy || actionBusy.current) return;
     try {
       if (hydrated) await saveTrailDraft(trailRef.current);
       onClose();
@@ -178,7 +245,8 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   }
 
   async function addFiles(files: File[], time?: number) {
-    if (importBusy.current || !files.length) return;
+    if (actionBusy.current || importBusy.current || !files.length) return;
+    actionBusy.current = true;
     importBusy.current = true;
     setBusy(true);
     setError("");
@@ -196,6 +264,7 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
           id: crypto.randomUUID(),
           title: levelLabel(before.levels.length + additions.length),
           note: "",
+          annotations: [],
           ...(time !== undefined ? { videoTime: time } : {}),
         });
       }
@@ -209,32 +278,109 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't add that photo. Try a JPG or PNG.");
     } finally {
+      actionBusy.current = false;
       importBusy.current = false;
       setBusy(false);
     }
   }
 
-  async function openFile(file: File) {
+  async function openFile(file: File, alreadyLocked = false) {
+    if (!alreadyLocked && actionBusy.current) return;
+    actionBusy.current = true;
     setBusy(true);
     setError("");
     try {
       if (file.size > MAX_TRAIL_FILE_BYTES)
         throw new Error("Choose a trail file smaller than 12 MB.");
-      const next = parseTrail(await file.text());
-      // Retain the previous draft as a backup before replacing it with an imported file.
-      if (trailRef.current.levels.length)
-        await saveDocument({
-          blob: new Blob([JSON.stringify(trailRef.current)], { type: "application/json" }),
-          fileName: `context-trail-backup-${Date.now()}.json`,
-        });
-      setTrail(next);
-      setActive(0);
-      setPreview(false);
-      setBoxing(false);
-      setStatus("Trail opened");
+      await replaceFromFile(file);
     } catch (e) {
       setError(e instanceof Error ? e.message : "This trail file could not be opened.");
     } finally {
+      actionBusy.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function replaceFromFile(file: File) {
+    const next = validateTrail(await redactStoredPhotos(parseTrail(await file.text())));
+    const currentTrail = trailRef.current;
+    if (hasTrailWork(currentTrail)) {
+      await saveTrailDraft(currentTrail);
+      await saveTrailDraftBackup(currentTrail);
+      setHasBackup(true);
+    }
+    trailRef.current = next;
+    setTrail(next);
+    setActive(0);
+    setPreview(false);
+    setBoxing(false);
+    setMarking(false);
+    setStatus(`Opened ${file.name}; previous draft kept in local recovery`);
+  }
+
+  async function chooseTrail() {
+    if (actionBusy.current) return;
+    if (!usesNativeDocumentPicker()) {
+      actionBusy.current = true;
+      setBusy(true);
+      setError("");
+      if (importInput.current) importInput.current.click();
+      else {
+        actionBusy.current = false;
+        setBusy(false);
+      }
+      return;
+    }
+    actionBusy.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const picked = await openDocument();
+      if (picked.cancelled) {
+        setStatus("Open cancelled; current draft kept");
+        return;
+      }
+      if (picked.file) {
+        await replaceFromFile(picked.file);
+        return;
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open a trail file.");
+      return;
+    } finally {
+      actionBusy.current = false;
+      setBusy(false);
+    }
+    importInput.current?.click();
+  }
+
+  async function restoreBackup() {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const backup = await loadTrailDraftBackup();
+      if (!backup) {
+        setHasBackup(false);
+        setError("No previous trail is available to restore.");
+        return;
+      }
+      const currentTrail = trailRef.current;
+      await saveTrailDraft(currentTrail);
+      await saveTrailDraftBackup(currentTrail);
+      const restored = await redactStoredPhotos(backup);
+      trailRef.current = restored;
+      setTrail(restored);
+      setActive(0);
+      setPreview(false);
+      setBoxing(false);
+      setMarking(false);
+      setStatus("Previous trail restored; replaced draft kept in local recovery");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not restore the previous trail.");
+    } finally {
+      actionBusy.current = false;
       setBusy(false);
     }
   }
@@ -248,6 +394,7 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   function go(index: number) {
     setActive(index);
     setBoxing(false);
+    setMarking(false);
     setDraftBox(null);
     start.current = null;
   }
@@ -260,7 +407,7 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
     };
   }
   function pointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (!boxing || !hasNext || e.button !== 0) return;
+    if ((!boxing && !marking) || (boxing && !hasNext) || e.button !== 0) return;
     const p = point(e);
     if (!p) return;
     start.current = p;
@@ -269,36 +416,65 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
   }
   function pointerMove(e: React.PointerEvent) {
     const p = point(e);
-    if (boxing && start.current && p) setDraftBox(normalizedBox(start.current, p));
+    if ((boxing || marking) && start.current && p) setDraftBox(normalizedBox(start.current, p));
   }
   function pointerUp(e: React.PointerEvent) {
     const p = point(e);
-    if (!boxing || !start.current || !p) return;
+    if ((!boxing && !marking) || !start.current || !p) return;
     const box = normalizedBox(start.current, p);
     start.current = null;
     setDraftBox(null);
     if (box.w < 0.02 || box.h < 0.02) {
-      setError("Drag a larger box around the subject that leads to the next photo.");
+      setError(
+        marking
+          ? "Drag a larger box around the annotation."
+          : "Drag a larger box around the subject that leads to the next photo.",
+      );
       return;
     }
-    updateLevel({ hotspot: box });
-    setBoxing(false);
+    if (marking) {
+      if (current.annotations.length >= MAX_TRAIL_ANNOTATIONS) {
+        setError(`A photo can contain up to ${MAX_TRAIL_ANNOTATIONS} annotations.`);
+        return;
+      }
+      updateLevel({
+        annotations: [
+          ...current.annotations,
+          {
+            id: crypto.randomUUID(),
+            label: "New mark",
+            box,
+            severity: "minor",
+            shape: "box",
+          },
+        ],
+      });
+      setMarking(false);
+    } else {
+      updateLevel({ hotspot: box });
+      setBoxing(false);
+    }
     setError("");
   }
-  async function saveOrShare(kind: "draft" | "viewer" | "share") {
+  async function saveOrShare(kind: "draft" | "viewer" | "share" | "pdf") {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
     setBusy(true);
     setError("");
     try {
       const draft = kind === "draft";
-      const blob = new Blob([draft ? JSON.stringify(validateTrail(trail)) : trailHtml(trail)], {
-        type: draft ? "application/json" : "text/html",
-      });
+      const pdf = kind === "pdf";
+      const blob = pdf
+        ? await createTrailPdf(trail)
+        : new Blob([draft ? JSON.stringify(validateTrail(trail)) : trailHtml(trail)], {
+            type: draft ? "application/json" : "text/html",
+          });
       const base =
         (trail.title.trim() || "context-trail")
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .slice(0, 50) || "context-trail";
-      const fileName = `${base}.${draft ? "context-trail.json" : "html"}`;
+      const fileName = `${base}.${draft ? "context-trail.json" : pdf ? "pdf" : "html"}`;
       if (kind === "share") {
         const result = await shareImage({
           blob,
@@ -312,42 +488,69 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
           return;
         }
         if (result === "shared") {
-          setStatus("Context Trail shared");
+          setStatus("Share sheet finished; delivery depends on the receiving app");
           return;
         }
+        setStatus("Sharing unavailable; working draft kept. Use Save trail to choose a location.");
+        return;
       }
-      await saveDocument({ blob, fileName });
+      const result = await saveDocument({ blob, fileName });
+      if (result.cancelled) {
+        setStatus("Save cancelled; working draft kept");
+        return;
+      }
+      const action = result.location
+        ? `Saved ${result.fileName} using the system picker`
+        : `Download started: ${result.fileName} (check browser downloads)`;
       setStatus(
-        draft
-          ? "Trail file saved — open it later to keep editing"
-          : "Viewer saved — send the HTML file and open it in a browser",
+        pdf
+          ? `PDF report ${action}`
+          : draft
+            ? `Editable trail ${action}`
+            : `Offline HTML viewer ${action}`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the trail. Try again.");
     } finally {
+      actionBusy.current = false;
       setBusy(false);
     }
   }
 
   async function newTrail() {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
     setBusy(true);
     setError("");
     try {
-      // The explicit prompt preserves work; never discard after an unsuccessful save.
-      if (trail.levels.length)
-        await saveDocument({
-          blob: new Blob([JSON.stringify(trail)], { type: "application/json" }),
+      const currentTrail = trailRef.current;
+      if (hasTrailWork(currentTrail)) {
+        const result = await saveDocument({
+          blob: new Blob([JSON.stringify(validateTrail(currentTrail))], {
+            type: "application/json",
+          }),
           fileName: `context-trail-backup-${Date.now()}.json`,
         });
-      setTrail(emptyTrail());
+        if (result.cancelled) {
+          setStatus("Backup save cancelled; current trail kept");
+          return;
+        }
+        await saveTrailDraftBackup(currentTrail);
+        setHasBackup(true);
+      }
+      const empty = emptyTrail();
+      trailRef.current = empty;
+      setTrail(empty);
       setActive(0);
       setPreview(false);
       setBoxing(false);
+      setMarking(false);
       setNewPrompt(false);
       setVideo(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save the current trail first.");
     } finally {
+      actionBusy.current = false;
       setBusy(false);
     }
   }
@@ -415,6 +618,35 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
                       onChange={(e) => setTrail({ ...trail, title: e.target.value })}
                     />
                   </label>
+                  <div className="trail-report-fields">
+                    <label>
+                      <span>Report title</span>
+                      <input
+                        aria-label="Report title"
+                        maxLength={160}
+                        value={trail.report.title}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setTrail({ ...trail, report: { ...trail.report, title: e.target.value } })
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>Report reference</span>
+                      <input
+                        aria-label="Report reference"
+                        maxLength={80}
+                        value={trail.report.reference}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setTrail({
+                            ...trail,
+                            report: { ...trail.report, reference: e.target.value },
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                   <nav className="trail-crumbs" aria-label="Context trail levels">
                     {trail.levels.map((level, i) => (
                       <button
@@ -454,17 +686,21 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
                       <button
                         className="trail-button"
                         disabled={busy}
-                        onClick={() => importInput.current?.click()}
+                        onClick={() => void chooseTrail()}
                       >
-                        Open a saved trail
+                        Open editable trail file
                       </button>
+                      <p className="trail-guidance">
+                        Opening replaces this working trail only after a valid file is selected. The
+                        previous draft is kept in local recovery.
+                      </p>
                     </div>
                   ) : (
                     <>
                       <div className="trail-image-area">
                         <div
                           ref={stage}
-                          className={`trail-stage ${boxing ? "trail-drawing" : ""}`}
+                          className={`trail-stage ${boxing || marking ? "trail-drawing" : ""}`}
                           style={{
                             aspectRatio: `${current.width}/${current.height}`,
                             width: `min(100%, ${(52 * current.width) / current.height}dvh)`,
@@ -482,9 +718,32 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
                             alt={current.title || levelLabel(active)}
                             draggable={false}
                           />
+                          {current.annotations.map((annotation, i) => (
+                            <div
+                              key={annotation.id}
+                              className={`trail-mark ${annotation.kind === "redact" ? "trail-mark-redact" : ""}`}
+                              style={{
+                                left: `${annotation.box.x * 100}%`,
+                                top: `${annotation.box.y * 100}%`,
+                                width: `${annotation.box.w * 100}%`,
+                                height: `${annotation.box.h * 100}%`,
+                                borderColor:
+                                  annotation.severity === "major"
+                                    ? "#ef4444"
+                                    : annotation.severity === "info"
+                                      ? "#38bdf8"
+                                      : "#facc15",
+                                borderRadius: annotation.shape === "ellipse" ? "50%" : "6px",
+                              }}
+                            >
+                              {annotation.kind === "redact"
+                                ? null
+                                : `${i + 1}. ${annotation.severity?.toUpperCase() ?? "MINOR"}`}
+                            </div>
+                          ))}
                           {box && hasNext && (
                             <button
-                              className={`trail-hotspot ${boxing ? "trail-inert" : ""}`}
+                              className={`trail-hotspot ${boxing || marking ? "trail-inert" : ""}`}
                               aria-label={`Open closer view: ${trail.levels[active + 1].title}`}
                               style={{
                                 left: `${box.x * 100}%`,
@@ -493,9 +752,9 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
                                 height: `${box.h * 100}%`,
                               }}
                               onClick={() => {
-                                if (!boxing) go(active + 1);
+                                if (!boxing && !marking) go(active + 1);
                               }}
-                              tabIndex={boxing ? -1 : 0}
+                              tabIndex={boxing || marking ? -1 : 0}
                             >
                               <span>
                                 Open closer view <ArrowRight size={14} />
@@ -555,6 +814,124 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
                                 onChange={(e) => updateLevel({ title: e.target.value })}
                               />
                             </label>
+                            <section
+                              className="trail-annotation-editor"
+                              aria-label="Photo annotations"
+                            >
+                              <h3>Photo annotations</h3>
+                              {current.annotations.map((annotation, i) => (
+                                <div className="trail-annotation" key={annotation.id}>
+                                  <label>
+                                    <span>
+                                      {annotation.kind === "redact"
+                                        ? "Redacted pixels"
+                                        : `Mark ${i + 1} label`}
+                                    </span>
+                                    <input
+                                      aria-label={`Mark ${i + 1} label`}
+                                      maxLength={500}
+                                      value={
+                                        annotation.kind === "redact"
+                                          ? "Redaction"
+                                          : annotation.label
+                                      }
+                                      disabled={busy || annotation.kind === "redact"}
+                                      onChange={(e) =>
+                                        updateLevel({
+                                          annotations: current.annotations.map((mark, index) =>
+                                            index === i ? { ...mark, label: e.target.value } : mark,
+                                          ),
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  {annotation.kind !== "redact" && (
+                                    <div className="trail-annotation-options">
+                                      <label>
+                                        <span>Severity</span>
+                                        <select
+                                          aria-label={`Mark ${i + 1} severity`}
+                                          value={annotation.severity ?? "minor"}
+                                          disabled={busy}
+                                          onChange={(e) =>
+                                            updateLevel({
+                                              annotations: current.annotations.map((mark, index) =>
+                                                index === i
+                                                  ? {
+                                                      ...mark,
+                                                      severity: e.target
+                                                        .value as Annotation["severity"],
+                                                    }
+                                                  : mark,
+                                              ),
+                                            })
+                                          }
+                                        >
+                                          <option value="info">Info</option>
+                                          <option value="minor">Minor</option>
+                                          <option value="major">Major</option>
+                                        </select>
+                                      </label>
+                                      <label>
+                                        <span>Shape</span>
+                                        <select
+                                          aria-label={`Mark ${i + 1} shape`}
+                                          value={annotation.shape ?? "box"}
+                                          disabled={busy}
+                                          onChange={(e) =>
+                                            updateLevel({
+                                              annotations: current.annotations.map((mark, index) =>
+                                                index === i
+                                                  ? {
+                                                      ...mark,
+                                                      shape: e.target.value as Annotation["shape"],
+                                                    }
+                                                  : mark,
+                                              ),
+                                            })
+                                          }
+                                        >
+                                          <option value="box">Box</option>
+                                          <option value="ellipse">Ellipse</option>
+                                        </select>
+                                      </label>
+                                      <button
+                                        className="trail-button"
+                                        disabled={busy}
+                                        onClick={() =>
+                                          updateLevel({
+                                            annotations: current.annotations.filter(
+                                              (_, index) => index !== i,
+                                            ),
+                                          })
+                                        }
+                                      >
+                                        Remove mark
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                              <button
+                                className={`trail-button ${marking ? "trail-primary" : ""}`}
+                                disabled={
+                                  busy || current.annotations.length >= MAX_TRAIL_ANNOTATIONS
+                                }
+                                aria-pressed={marking}
+                                onClick={() => {
+                                  setMarking(!marking);
+                                  setBoxing(false);
+                                  setDraftBox(null);
+                                }}
+                              >
+                                {marking ? "Cancel mark" : "Draw annotation mark"}
+                              </button>
+                              <p className="trail-guidance">
+                                {marking
+                                  ? "Drag on the photo to place a box. Edit the mark label, severity and shape below."
+                                  : "Mark geometry, labels and severity are saved with each photo."}
+                              </p>
+                            </section>
                             <label>
                               <span>What should someone know?</span>
                               <textarea
@@ -682,33 +1059,55 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
                     </p>
                   )}
                   <div className="trail-actions">
+                    <p className="trail-action-hint">
+                      Autosave keeps the working draft on this device. Save creates editable JSON;
+                      Open replaces only after validation and keeps the previous draft in local
+                      recovery. HTML is a viewer, PDF is a report, and Share opens the system share
+                      sheet. Older v1 files migrate their stored photos, notes, and links, but
+                      report details and structured marks omitted by v1 cannot be reconstructed.
+                      Main-screen Copy remains a separate plain-text summary.
+                    </p>
                     <button
                       className="trail-button"
                       disabled={busy || !trail.levels.length}
                       onClick={() => void saveOrShare("draft")}
                     >
-                      <Download size={16} /> Save trail
+                      <Download size={16} /> Save editable trail
                     </button>
                     <button
                       className="trail-button"
                       disabled={busy || !ready}
                       onClick={() => void saveOrShare("viewer")}
                     >
-                      Save viewer
+                      Save offline HTML viewer
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy || !trail.levels.length}
+                      onClick={() => void saveOrShare("pdf")}
+                    >
+                      <FileText size={16} /> Export PDF report
                     </button>
                     <button
                       className="trail-button trail-primary"
                       disabled={busy || !ready}
                       onClick={() => void saveOrShare("share")}
                     >
-                      <Share2 size={17} /> Share trail
+                      <Share2 size={17} /> Share HTML viewer
                     </button>
                     <button
                       className="trail-button"
                       disabled={busy}
-                      onClick={() => importInput.current?.click()}
+                      onClick={() => void chooseTrail()}
                     >
-                      Open trail
+                      Open editable trail
+                    </button>
+                    <button
+                      className="trail-button"
+                      disabled={busy || !hasBackup}
+                      onClick={() => void restoreBackup()}
+                    >
+                      Restore previous draft
                     </button>
                     <button
                       className="trail-button"
@@ -788,7 +1187,12 @@ export function ContextTrailEditor({ onClose, initialImage, initialAnnotations =
               hidden
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) void openFile(f);
+                if (f) void openFile(f, true);
+                else {
+                  actionBusy.current = false;
+                  setBusy(false);
+                  setStatus("Open cancelled; current draft kept");
+                }
                 e.target.value = "";
               }}
             />
