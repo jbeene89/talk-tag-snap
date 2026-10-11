@@ -105,6 +105,23 @@ test("paginates long notes and large mark lists without dropping their final tex
   assert.ok(text.includes("Annotation 70:"));
 });
 
+test("keeps long annotation labels within the content margins on continuation pages", async () => {
+  const trail = fixture();
+  trail.levels = [trail.levels[0]];
+  trail.levels[0].annotations = Array.from({ length: 70 }, (_, index) => ({
+    id: `wide-mark-${index}`,
+    label: `${String(index + 1).padStart(2, "0")} ${"W".repeat(100)}`,
+    box: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+    severity: "major" as const,
+    shape: "box" as const,
+  }));
+
+  const pdf = await createTrailPdf(trail, testFonts);
+  const bytes = Buffer.from(await pdf.arrayBuffer());
+  const pageCount = (bytes.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length;
+  assert.ok(pageCount > 4, "long labels should exercise several continuation pages");
+});
+
 test("renders and maps valid CJK, arrow, bullet and Greek report text", async () => {
   const trail = fixture();
   trail.levels = [trail.levels[0]];

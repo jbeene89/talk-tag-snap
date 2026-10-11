@@ -14,6 +14,7 @@ const COLORS: Record<Severity, [number, number, number]> = {
 const MARGIN = 40;
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
+const TEXT_EDGE_PADDING = 4;
 
 type FontData = { latin: string; cjk: string };
 type FontLoader = () => Promise<FontData>;
@@ -74,7 +75,7 @@ function splitTextToWidth(doc: jsPDF, text: string, width: number): string[] {
     let lineWidth = 0;
     for (const character of paragraph) {
       const characterWidth = textWidth(doc, character);
-      if (line && lineWidth + characterWidth > width) {
+      if (line && lineWidth + characterWidth > width - TEXT_EDGE_PADDING) {
         lines.push(line);
         line = "";
         lineWidth = 0;
@@ -90,10 +91,13 @@ function splitTextToWidth(doc: jsPDF, text: string, width: number): string[] {
 function drawText(doc: jsPDF, text: string, x: number, y: number) {
   let run = "";
   let runFamily = "";
+  const startX = x;
   for (const character of text) {
     const family = fontForCharacter(doc, character);
     if (run && family !== runFamily) {
       doc.setFont(runFamily, "normal");
+      if (x + doc.getTextWidth(run) > PAGE_WIDTH - MARGIN + 0.01)
+        throw new Error("PDF text exceeds the page content margin.");
       doc.text(run, x, y);
       x += doc.getTextWidth(run);
       run = "";
@@ -103,8 +107,11 @@ function drawText(doc: jsPDF, text: string, x: number, y: number) {
   }
   if (run) {
     doc.setFont(runFamily, "normal");
+    if (x + doc.getTextWidth(run) > PAGE_WIDTH - MARGIN + 0.01)
+      throw new Error("PDF text exceeds the page content margin.");
     doc.text(run, x, y);
   }
+  if (startX < MARGIN - 0.01) throw new Error("PDF text exceeds the page content margin.");
 }
 
 function drawHeader(doc: jsPDF, trail: ContextTrail, heading: string): number {
@@ -215,6 +222,7 @@ function addDetailPages(doc: jsPDF, trail: ContextTrail, index: number) {
     if (y + 20 > bottom) {
       doc.addPage();
       y = drawHeader(doc, trail, `${heading} (continued)`) + 20;
+      doc.setFontSize(11);
     }
     drawText(doc, title, MARGIN, y);
     y += 16;
@@ -224,6 +232,7 @@ function addDetailPages(doc: jsPDF, trail: ContextTrail, index: number) {
       if (y + 14 > bottom) {
         doc.addPage();
         y = drawHeader(doc, trail, `${heading} (continued)`) + 20;
+        doc.setFontSize(10);
       }
       drawText(doc, line, MARGIN, y);
       y += 14;

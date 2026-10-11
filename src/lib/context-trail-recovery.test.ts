@@ -50,6 +50,49 @@ test("failed draft processing never enables a draft replacement", async () => {
   assert.equal(backupSaved.title, "Previous work");
 });
 
+test("a failed hydration can retry and restore the same current draft without writing over it", async () => {
+  const current = draft("Current work");
+  const previous = draft("Previous work");
+  let currentReadAttempts = 0;
+  let prepareAttempts = 0;
+  const currentSaved = current;
+  const backupSaved = previous;
+  let hydrated = false;
+
+  const hydrate = () =>
+    hydrateTrailDraft({
+      loadCurrent: async () => {
+        currentReadAttempts += 1;
+        if (currentReadAttempts === 1) throw new Error("current draft read failed");
+        return currentSaved;
+      },
+      loadBackup: async () => backupSaved,
+      prepare: async (trail) => {
+        prepareAttempts += 1;
+        if (prepareAttempts === 1) throw new Error("redaction failed");
+        return trail;
+      },
+      emptyTrail: () => draft("Empty"),
+    });
+
+  await assert.rejects(hydrate(), /current draft read failed/);
+  assert.equal(hydrated, false);
+  assert.equal(currentSaved.title, "Current work");
+  assert.equal(backupSaved.title, "Previous work");
+
+  await assert.rejects(hydrate(), /redaction failed/);
+  assert.equal(hydrated, false);
+  assert.equal(currentSaved.title, "Current work");
+  assert.equal(backupSaved.title, "Previous work");
+
+  const result = await hydrate();
+  hydrated = true;
+  assert.equal(result.trail.title, "Current work");
+  assert.equal(hydrated, true);
+  assert.equal(currentSaved.title, "Current work");
+  assert.equal(backupSaved.title, "Previous work");
+});
+
 test("a failed backup restore is processed before either saved draft can be replaced", async () => {
   const current = draft("Current work");
   const previous = draft("Previous work");

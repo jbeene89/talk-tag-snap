@@ -114,6 +114,7 @@ export function ContextTrailEditor({
 }: Props) {
   const [trail, setTrail] = useState<ContextTrail>(emptyTrail);
   const [hydrated, setHydrated] = useState(false);
+  const [hydrationAttempt, setHydrationAttempt] = useState(0);
   const [active, setActive] = useState(0);
   const [preview, setPreview] = useState(false);
   const [drawingMode, setDrawingMode] = useState<TrailDrawingMode>(null);
@@ -169,6 +170,8 @@ export function ContextTrailEditor({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      setError("");
+      setStatus("Opening draft…");
       try {
         const restored = await hydrateTrailDraft({
           loadCurrent: loadTrailDraft,
@@ -224,7 +227,7 @@ export function ContextTrailEditor({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hydrationAttempt]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -613,9 +616,26 @@ export function ContextTrailEditor({
               </button>
             </header>
             {!hydrated ? (
-              <div className="trail-empty">
-                <Loader2 className="animate-spin" /> Opening your trail…
-              </div>
+              error ? (
+                <div className="trail-empty" role="alert">
+                  <h2>Your saved draft hasn’t been changed.</h2>
+                  <p>{error}</p>
+                  <button
+                    className="trail-button trail-primary"
+                    disabled={busy}
+                    onClick={() => {
+                      setError("");
+                      setHydrationAttempt((attempt) => attempt + 1);
+                    }}
+                  >
+                    Try opening the draft again
+                  </button>
+                </div>
+              ) : (
+                <div className="trail-empty">
+                  <Loader2 className="animate-spin" /> Opening your trail…
+                </div>
+              )
             ) : (
               <>
                 <div className="trail-top">
