@@ -19,6 +19,7 @@ const config: CapacitorConfig = {
     : {}),
   android: {
     allowMixedContent: false,
+    loggingBehavior: 'none',
   },
   plugins: {
     StatusBar: { style: "DARK" },

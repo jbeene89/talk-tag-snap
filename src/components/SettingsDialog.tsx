@@ -107,10 +107,39 @@ export function SettingsDialog({
               </div>
               <Switch
                 checked={analytics.consent === "granted"}
-                onCheckedChange={(checked) => analytics.setConsent(checked ? "granted" : "denied")}
+                disabled={analytics.consentUpdateStatus === "pending"}
+                onCheckedChange={(checked) =>
+                  void analytics.setConsent(checked ? "granted" : "denied")
+                }
                 aria-label="Share optional usage analytics"
               />
             </div>
+            {analytics.consentUpdateStatus === "pending" && (
+              <p role="status" className="mt-2 px-1 text-xs text-neutral-400">
+                Updating analytics consent…
+              </p>
+            )}
+            {analytics.consentUpdateStatus === "unconfirmed" && (
+              <div role="alert" className="mt-2 space-y-2 px-1 text-xs text-amber-200">
+                <p>
+                  {analytics.nativeCollectionConfirmed && !analytics.nativeConsentPersisted
+                    ? "Firebase collection is off for this session, but the denial could not be saved. Restarting may restore the previous setting."
+                    : analytics.nativeConsentPersisted && !analytics.nativeCollectionConfirmed
+                      ? "The denial was saved, but Firebase collection could not be confirmed off for this session."
+                      : analytics.nativeCollectionConfirmed && analytics.nativeConsentPersisted
+                        ? "Firebase is off and denial is saved, but the browser could not confirm your analytics choice."
+                        : "App analytics events are blocked, but Firebase collection and durable denial could not be confirmed. Native collection may continue."}{" "}
+                  Retry the opt-out.
+                </p>
+                <button
+                  type="button"
+                  className="font-bold underline underline-offset-2"
+                  onClick={() => void analytics.retryConsent()}
+                >
+                  Retry opt-out
+                </button>
+              </div>
+            )}
           </div>
 
           <a href="/privacy" className={`${rowClass} no-underline`}>

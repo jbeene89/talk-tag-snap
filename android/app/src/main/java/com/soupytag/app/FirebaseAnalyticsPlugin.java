@@ -11,12 +11,17 @@ import com.google.firebase.analytics.FirebaseAnalytics;
 public class FirebaseAnalyticsPlugin extends Plugin {
     @PluginMethod
     public void getStatus(PluginCall call) {
-        FirebaseAnalytics analytics = FirebaseAnalyticsStartup.getAnalytics(getContext());
-        boolean configured = analytics != null;
-        String consent = configured ? FirebaseAnalyticsStartup.readConsent(getContext()) : "denied";
+        boolean configured = FirebaseAnalyticsStartup.isConfigured(getContext());
         JSObject result = new JSObject();
         result.put("configured", configured);
+        String consent = FirebaseAnalyticsStartup.readConsent(getContext());
+        boolean consentPersisted = "granted".equals(consent) || "denied".equals(consent);
+        boolean collectionConfirmed = FirebaseAnalyticsStartup.isCollectionStateConfirmed();
         result.put("consent", consent);
+        result.put("collectionEnabled", FirebaseAnalyticsStartup.isCollectionEnabled());
+        result.put("collectionConfirmed", collectionConfirmed);
+        result.put("consentPersisted", consentPersisted);
+        result.put("confirmed", collectionConfirmed && consentPersisted);
         call.resolve(result);
     }
 
@@ -28,23 +33,21 @@ public class FirebaseAnalyticsPlugin extends Plugin {
             return;
         }
 
-        FirebaseAnalytics analytics = FirebaseAnalyticsStartup.getAnalytics(getContext());
-        boolean configured = analytics != null;
-        String applied = configured ? requested : "denied";
-        if ("denied".equals(applied) && analytics != null) {
-            analytics.setAnalyticsCollectionEnabled(false);
-        }
-        boolean persisted = FirebaseAnalyticsStartup.persistConsent(getContext(), applied);
-        if (!persisted) applied = "denied";
-
-        if (analytics != null) {
-            analytics.setConsent(FirebaseAnalyticsStartup.consentMap("granted".equals(applied)));
-            analytics.setAnalyticsCollectionEnabled("granted".equals(applied) && persisted);
-        }
-
+        boolean configured = FirebaseAnalyticsStartup.isConfigured(getContext());
+        FirebaseAnalyticsStartup.ConsentResult consentResult =
+            FirebaseAnalyticsStartup.updateConsent(
+                requested,
+                configured,
+                consent -> FirebaseAnalyticsStartup.persistConsent(getContext(), consent),
+                enabled -> FirebaseAnalyticsStartup.setCollectionEnabled(getContext(), enabled)
+            );
         JSObject result = new JSObject();
-        result.put("configured", configured && persisted);
-        result.put("consent", applied);
+        result.put("configured", consentResult.configured);
+        result.put("consent", consentResult.consent);
+        result.put("collectionEnabled", consentResult.collectionEnabled);
+        result.put("collectionConfirmed", consentResult.collectionConfirmed);
+        result.put("consentPersisted", consentResult.consentPersisted);
+        result.put("confirmed", consentResult.confirmed);
         call.resolve(result);
     }
 
@@ -57,9 +60,21 @@ public class FirebaseAnalyticsPlugin extends Plugin {
             return;
         }
 
-        FirebaseAnalytics analytics = FirebaseAnalyticsStartup.getAnalytics(getContext());
         String consent = FirebaseAnalyticsStartup.readConsent(getContext());
-        if (!FirebaseAnalyticsStartup.shouldCollect(consent, analytics != null)) {
+        if (
+            !FirebaseAnalyticsStartup.isCollectionEnabled() ||
+            !FirebaseAnalyticsStartup.isCollectionStateConfirmed() ||
+            !FirebaseAnalyticsStartup.shouldCollect(
+                consent,
+                FirebaseAnalyticsStartup.isConfigured(getContext())
+            )
+        ) {
+            call.resolve();
+            return;
+        }
+
+        FirebaseAnalytics analytics = FirebaseAnalyticsStartup.getInitializedAnalytics(getContext());
+        if (analytics == null) {
             call.resolve();
             return;
         }
