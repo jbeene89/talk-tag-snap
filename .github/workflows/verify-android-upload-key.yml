@@ -1,0 +1,36 @@
+name: Verify Android upload key (nonpublishing)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_nonpublishing_verification:
+        description: "Confirm this only checks signing access and the public certificate; it does not build or publish"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ inputs.confirm_nonpublishing_verification && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Verify signing asset without building or publishing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SOUPYTAG_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SOUPYTAG_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SOUPYTAG_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash scripts/verify-android-upload-key.sh
