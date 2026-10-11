@@ -40,7 +40,11 @@ test("native consent is applied before Capacitor starts the web view", () => {
   );
   assert.match(
     startup,
-    /shouldInitialize\(readConsent\(context\), readRevocation\(context\), hasConfiguration\(context\)\)[\s\S]*?initializeWithConsent\(context\)/,
+    /static boolean apply\(Context context, boolean configured\)[\s\S]*?shouldInitialize\(readConsent\(context\), readRevocation\(context\), configured\)[\s\S]*?initializeWithConsent\(context\)/,
+  );
+  assert.match(
+    startup,
+    /static FirebaseAnalytics initializeWithConsent\(Context context\)[\s\S]*?shouldInitialize\(readConsent\(context\), readRevocation\(context\), hasConfiguration\(context\)\)/,
   );
   assert.match(startup, /REVOCATION_PREFERENCES/);
   assert.match(startup, /getBoolean\(REVOCATION_KEY, true\)/);
