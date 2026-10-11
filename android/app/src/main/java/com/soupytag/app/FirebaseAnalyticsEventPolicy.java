@@ -4,6 +4,8 @@ import android.os.Bundle;
 
 import com.getcapacitor.JSObject;
 
+import java.util.Iterator;
+
 final class FirebaseAnalyticsEventPolicy {
     private FirebaseAnalyticsEventPolicy() {}
 
@@ -36,7 +38,9 @@ final class FirebaseAnalyticsEventPolicy {
         Bundle bundle = new Bundle();
         if (parameters == null) return bundle;
 
-        for (String key : parameters.keySet()) {
+        Iterator<String> keys = parameters.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
             Object value = parameters.opt(key);
             if (value instanceof String) {
                 bundle.putString(key, (String) value);

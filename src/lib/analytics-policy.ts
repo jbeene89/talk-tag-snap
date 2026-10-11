@@ -15,6 +15,35 @@ export function firebaseCollectionEnabled(consent: AnalyticsConsent, configured:
   return configured && consent === "granted";
 }
 
+export function firebaseStartupAllowed(
+  configured: boolean,
+  nativeConsent: AnalyticsConsent,
+  storedConsent: AnalyticsConsent,
+  nativeStatusConfirmed: boolean,
+): boolean {
+  return (
+    configured &&
+    nativeStatusConfirmed &&
+    nativeConsent === "granted" &&
+    storedConsent === "granted"
+  );
+}
+
+export function firebaseGrantConfirmed(
+  configured: boolean,
+  consent: AnalyticsConsent,
+  confirmed: boolean,
+): boolean {
+  return configured && confirmed && consent === "granted";
+}
+
+export function firebaseRevocationConfirmed(
+  consent: AnalyticsConsent,
+  confirmed: boolean,
+): boolean {
+  return confirmed && consent === "denied";
+}
+
 export function shouldLogFirebaseAppOpen(
   ready: boolean,
   consent: AnalyticsConsent,

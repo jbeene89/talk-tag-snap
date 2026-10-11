@@ -14,6 +14,14 @@ public class FirebaseAnalyticsEventPolicyTest {
         assertFalse(FirebaseAnalyticsStartup.shouldCollect("denied", true));
         assertFalse(FirebaseAnalyticsStartup.shouldCollect("granted", false));
         assertTrue(FirebaseAnalyticsStartup.shouldCollect("granted", true));
+        assertFalse(FirebaseAnalyticsStartup.shouldInitialize("invalid", true));
+    }
+
+    @Test
+    public void revocationIsConfirmedOnlyAfterStorageAndNativeDisableSucceed() {
+        assertFalse(FirebaseAnalyticsStartup.isRevocationConfirmed(true, false, true));
+        assertFalse(FirebaseAnalyticsStartup.isRevocationConfirmed(true, true, false));
+        assertTrue(FirebaseAnalyticsStartup.isRevocationConfirmed(true, true, true));
     }
 
     @Test

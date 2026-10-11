@@ -111,6 +111,23 @@ export function SettingsDialog({
                 aria-label="Share optional usage analytics"
               />
             </div>
+            {analytics.consentError && (
+              <div
+                className="mt-2 rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-xs text-amber-100"
+                role="status"
+              >
+                <p>{analytics.consentError}</p>
+                {analytics.revocationPending && (
+                  <button
+                    type="button"
+                    className="mt-2 font-bold underline"
+                    onClick={() => void analytics.retryRevocation()}
+                  >
+                    Retry opt-out
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <a href="/privacy" className={`${rowClass} no-underline`}>

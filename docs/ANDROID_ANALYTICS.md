@@ -5,14 +5,14 @@ Firebase Analytics is prepared but no Firebase project or app configuration is i
 ## Routing, consent, and event schema
 
 - Android routes only to the native Firebase Analytics SDK. The web app routes only to the existing PostHog integration; other platforms are inert. Android events are never also sent to PostHog.
-- Android collection defaults to disabled in the manifest before JavaScript starts. Native startup enables it only for the exact persisted Firebase consent value `granted` and a configured Firebase app. Missing configuration, corrupt/unrecognized consent, or bridge errors fail closed.
+- The Firebase automatic initialization provider is removed from the merged manifest. The bridge does not initialize Firebase while reading status; it initializes Analytics only after both persisted native and WebView consent are exactly `granted`. Missing configuration, corrupt/unrecognized consent, or bridge errors fail closed, including when Firebase's own preferences retain an older collection grant.
 - Revocation disables native collection before returning to JavaScript, records denial in native preferences, and applies denied Analytics Storage consent. Ad Storage, Ad User Data, and Ad Personalization are always denied. Advertising-ID collection and screen reporting are disabled, and the merged manifest removes `AD_ID`.
 - The existing v1 choice authorized PostHog only. Existing grants are not carried over to Google; Android asks for a fresh choice. Existing denials remain denials. No pre-consent events are replayed, and the app does not send an install event when the user later opts in.
 - Only `app_opened` (a later app start when Firebase consent was already persisted at startup), `tag_created` (`method`: `tap`, `box`, or `redact`), and `report_exported` (`method`, bounded `tag_count`, `timestamp_included`) are explicitly sent to Firebase. `timestamp_included` is encoded as the Firebase-supported integer `0L` or `1L` in the native event bundle. Other existing events and all exception capture are omitted on Android. Invalid names, values, and extra properties are rejected by both TypeScript and native allowlists.
 - Firebase Analytics can collect its standard lifecycle/engagement events while enabled, including `first_open`, `session_start`, and `user_engagement`. `first_open` is an SDK-defined app event, not a count of Google Play downloads or a reliable install count. Report only consenting users' explicitly logged events as opt-in activity; do not infer downloads or backfill use before consent.
 - Firebase may receive a Firebase app-instance identifier and app/device/OS and network metadata (including IP address). These data are pseudonymous, not anonymous. The SDK does not receive account IDs, email addresses, photos, image content, audio, transcripts, notes, report text, filenames, paths, URLs, user-entered labels, or raw errors from this event schema. Confirm the final SDK disclosures before release.
 
-The small native Capacitor bridge is intentional: it reads persisted Firebase-specific consent and applies collection controls before the WebView starts, then validates every event again before logging. A JavaScript-only or web-tag implementation cannot provide that startup guarantee.
+The small native Capacitor bridge is intentional: it checks persisted Firebase-specific consent before explicitly initializing the SDK, then validates every event again before logging. A JavaScript-only or web-tag implementation cannot provide that startup guarantee.
 
 ## Manual Firebase setup (not performed for this change)
 
@@ -23,10 +23,10 @@ The small native Capacitor bridge is intentional: it reads persisted Firebase-sp
 
 ## Test-build verification
 
-1. On a clean install, confirm Firebase DebugView has no app analytics before the Settings switch is enabled and remains empty after denying consent.
+1. On a clean install, confirm Firebase DebugView has no app analytics before the Settings switch is enabled and remains empty after denying consent. Also grant once, retain Firebase's SDK preferences, remove or corrupt the app-specific consent value, force-stop and relaunch; verify the SDK is not initialized or collecting before a fresh choice.
 2. Enable consent, restart the app, and confirm `app_opened`; create a test tag and complete an export to confirm only the fixed events and allowed properties appear. Confirm no filenames, labels, text, photos, URLs, or identifiers from another provider appear.
 3. Revoke consent while online, then perform further actions and restart. Confirm subsequent events stop. Re-consent and confirm only activity after the new choice is logged; earlier actions are not replayed.
-4. Inspect the merged debug manifest (`:app:processDebugMainManifest`) and the packaged APK to confirm `com.google.android.gms.permission.AD_ID` is absent, collection and automatic screen reporting are disabled by default, and no unexpected permissions were added. Review Firebase DebugView's automatic events and the current Firebase SDK data disclosures.
+4. Inspect the merged debug manifest (`:app:processDebugMainManifest`) and packaged APK to confirm `FirebaseInitProvider`, `com.google.android.gms.permission.AD_ID`, and AdServices permissions are absent; collection and `google_analytics_automatic_screen_reporting_enabled` are disabled by default; and no unexpected permissions were added. Review Firebase DebugView's automatic events and the current Firebase SDK data disclosures.
 5. Record the tested Firebase SDK versions, app version, build variant, consent transitions, and manifest result before making a release decision.
 
 ## Privacy notice and Play Data Safety review

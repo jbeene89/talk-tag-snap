@@ -5,7 +5,10 @@ import {
   LEGACY_ANALYTICS_CONSENT_KEY,
   firebaseCollectionEnabled,
   firebaseEvent,
+  firebaseGrantConfirmed,
   getAnalyticsProvider,
+  firebaseStartupAllowed,
+  firebaseRevocationConfirmed,
   readAnalyticsConsent,
   shouldLogFirebaseAppOpen,
 } from "./analytics-policy.ts";
@@ -63,6 +66,21 @@ test("Firebase starts closed, revokes immediately, and does not backfill on re-c
   assert.equal(shouldLogFirebaseAppOpen(true, "denied", true), false);
   assert.equal(shouldLogFirebaseAppOpen(false, "granted", true), false);
   assert.equal(shouldLogFirebaseAppOpen(true, "granted", true), true);
+});
+
+test("Firebase startup requires matching confirmed native and web grants", () => {
+  assert.equal(firebaseStartupAllowed(true, "granted", "granted", true), true);
+  assert.equal(firebaseStartupAllowed(true, "granted", "denied", true), false);
+  assert.equal(firebaseStartupAllowed(true, "denied", "granted", true), false);
+  assert.equal(firebaseStartupAllowed(true, "granted", "granted", false), false);
+  assert.equal(firebaseStartupAllowed(false, "granted", "granted", true), false);
+});
+
+test("Firebase grant and revocation statuses require native confirmation and recover on retry", () => {
+  assert.equal(firebaseGrantConfirmed(true, "granted", false), false);
+  assert.equal(firebaseGrantConfirmed(true, "granted", true), true);
+  assert.equal(firebaseRevocationConfirmed("denied", false), false);
+  assert.equal(firebaseRevocationConfirmed("denied", true), true);
 });
 
 test("Firebase receives only fixed events and constrained properties", () => {

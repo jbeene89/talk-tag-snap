@@ -14,6 +14,9 @@ import {
   ANALYTICS_CONSENT_KEY,
   firebaseCollectionEnabled,
   firebaseEvent,
+  firebaseGrantConfirmed,
+  firebaseRevocationConfirmed,
+  firebaseStartupAllowed,
   getAnalyticsProvider,
   readAnalyticsConsent,
   shouldLogFirebaseAppOpen,
@@ -26,7 +29,18 @@ export type { AnalyticsConsent, AnalyticsProperties } from "./analytics-policy";
 type FirebaseAnalyticsStatus = {
   configured: boolean;
   consent: AnalyticsConsent;
+  confirmed: boolean;
+  error?: string;
 };
+
+function firebaseStatusMessage(status: FirebaseAnalyticsStatus, fallback: string): string {
+  if (status.error === "storage") return "Consent could not be stored; analytics remains off.";
+  if (status.error === "disable")
+    return "Firebase could not confirm collection is off. Retry opt-out.";
+  if (status.error === "initialize")
+    return "Firebase could not start with consent. Analytics remains off.";
+  return fallback;
+}
 
 type FirebaseAnalyticsPlugin = {
   getStatus(): Promise<FirebaseAnalyticsStatus>;
@@ -41,8 +55,11 @@ type FirebaseAnalyticsPlugin = {
 
 type AnalyticsContextValue = {
   consent: AnalyticsConsent;
+  consentError: string | null;
+  revocationPending: boolean;
   distinctId: string | null;
   setConsent: (consent: Exclude<AnalyticsConsent, "unset">) => Promise<void>;
+  retryRevocation: () => Promise<void>;
   capture: (event: string, properties?: AnalyticsProperties) => void;
   captureException: (error: unknown, properties?: AnalyticsProperties) => void;
 };
@@ -52,8 +69,11 @@ const FirebaseAnalyticsBridge = registerPlugin<FirebaseAnalyticsPlugin>("Firebas
 
 const AnalyticsContext = createContext<AnalyticsContextValue>({
   consent: "unset",
+  consentError: null,
+  revocationPending: false,
   distinctId: null,
   setConsent: async () => undefined,
+  retryRevocation: async () => undefined,
   capture: () => undefined,
   captureException: () => undefined,
 });
@@ -89,8 +109,22 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const [distinctId, setDistinctId] = useState<string | null>(null);
   const [nativeConfigured, setNativeConfigured] = useState(false);
   const [nativeConsentAtStartup, setNativeConsentAtStartup] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [revocationPending, setRevocationPending] = useState(false);
   const [ready, setReady] = useState(false);
   const openedThisSession = useRef(false);
+  const firebaseCollectionConfirmed = useRef(false);
+  const nativeConsentQueue = useRef(Promise.resolve());
+  const applyFirebaseConsent = useCallback((requested: Exclude<AnalyticsConsent, "unset">) => {
+    const request = nativeConsentQueue.current.then(() =>
+      FirebaseAnalyticsBridge.setConsent({ consent: requested }),
+    );
+    nativeConsentQueue.current = request.then(
+      () => undefined,
+      () => undefined,
+    );
+    return request;
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -98,19 +132,62 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
       if (provider === "firebase") {
         try {
           const nativeStatus = await FirebaseAnalyticsBridge.getStatus();
-          let storedConsent = nativeStatus.configured ? nativeStatus.consent : "denied";
-          if (storedConsent === "unset" && readStoredConsent() === "denied") {
-            const deniedStatus = await FirebaseAnalyticsBridge.setConsent({ consent: "denied" });
-            storedConsent = deniedStatus.consent;
-          }
+          const validStartupGrant = firebaseStartupAllowed(
+            nativeStatus.configured,
+            nativeStatus.consent,
+            readStoredConsent(),
+            nativeStatus.confirmed,
+          );
+          const appliedStatus = await applyFirebaseConsent(
+            validStartupGrant ? "granted" : "denied",
+          );
+          if (!validStartupGrant) persistConsent("denied");
+          const confirmedGrant =
+            validStartupGrant &&
+            firebaseGrantConfirmed(
+              appliedStatus.configured,
+              appliedStatus.consent,
+              appliedStatus.confirmed,
+            );
           if (!active) return;
-          setNativeConfigured(nativeStatus.configured);
-          setNativeConsentAtStartup(nativeStatus.configured && storedConsent === "granted");
-          setConsentState(storedConsent);
+          firebaseCollectionConfirmed.current = confirmedGrant;
+          setNativeConfigured(appliedStatus.configured && appliedStatus.confirmed);
+          setNativeConsentAtStartup(confirmedGrant);
+          setConsentState(confirmedGrant ? "granted" : "denied");
+          setRevocationPending(!confirmedGrant && !appliedStatus.confirmed);
+          setConsentError(
+            validStartupGrant && !confirmedGrant
+              ? firebaseStatusMessage(
+                  appliedStatus,
+                  "Saved analytics consent could not be revalidated. Analytics remains off.",
+                )
+              : appliedStatus.confirmed
+                ? null
+                : firebaseStatusMessage(
+                    appliedStatus,
+                    "Native analytics opt-out is unconfirmed. Retry to confirm it.",
+                  ),
+          );
         } catch {
           if (!active) return;
-          setNativeConfigured(false);
+          persistConsent("denied");
+          firebaseCollectionConfirmed.current = false;
+          setNativeConsentAtStartup(false);
           setConsentState("denied");
+          try {
+            const status = await applyFirebaseConsent("denied");
+            setNativeConfigured(status.configured && status.confirmed);
+            setRevocationPending(!status.confirmed);
+            setConsentError(
+              status.confirmed
+                ? "Saved analytics consent could not be revalidated. Analytics remains off."
+                : "Native analytics opt-out is unconfirmed. Retry to confirm it.",
+            );
+          } catch {
+            setNativeConfigured(false);
+            setRevocationPending(true);
+            setConsentError("Native analytics opt-out is unconfirmed. Retry to confirm it.");
+          }
         }
       } else {
         const storedConsent = readStoredConsent();
@@ -130,23 +207,112 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [provider]);
+  }, [applyFirebaseConsent, provider]);
 
   const setConsent = useCallback(
     async (next: Exclude<AnalyticsConsent, "unset">) => {
       if (provider === "firebase") {
+        if (next === "denied") {
+          firebaseCollectionConfirmed.current = false;
+          setConsentState("denied");
+          setNativeConsentAtStartup(false);
+          setDistinctId(null);
+          persistConsent("denied");
+          setRevocationPending(true);
+          try {
+            const status = await applyFirebaseConsent("denied");
+            const confirmed = firebaseRevocationConfirmed(status.consent, status.confirmed);
+            setNativeConfigured(status.configured && status.confirmed);
+            setRevocationPending(!confirmed);
+            setConsentError(
+              confirmed ? null : "Native analytics opt-out is unconfirmed. Retry to confirm it.",
+            );
+            if (!confirmed) {
+              setConsentError(
+                firebaseStatusMessage(
+                  status,
+                  "Native analytics opt-out is unconfirmed. Retry to confirm it.",
+                ),
+              );
+            }
+          } catch {
+            setNativeConfigured(false);
+            setRevocationPending(true);
+            setConsentError("Native analytics opt-out is unconfirmed. Retry to confirm it.");
+          }
+          return;
+        }
+
+        if (!persistConsent("granted")) {
+          firebaseCollectionConfirmed.current = false;
+          setConsentState("denied");
+          setNativeConsentAtStartup(false);
+          setNativeConfigured(false);
+          setDistinctId(null);
+          setRevocationPending(false);
+          setConsentError("Analytics could not be enabled because consent storage is unavailable.");
+          return;
+        }
+
         try {
-          const nativeStatus = await FirebaseAnalyticsBridge.setConsent({ consent: next });
-          const appliedConsent = nativeStatus.configured ? nativeStatus.consent : "denied";
-          persistConsent(appliedConsent);
-          setNativeConfigured(nativeStatus.configured);
-          setConsentState(appliedConsent);
-        } catch {
+          const status = await applyFirebaseConsent("granted");
+          const confirmedGrant = firebaseGrantConfirmed(
+            status.configured,
+            status.consent,
+            status.confirmed,
+          );
+          if (confirmedGrant) {
+            firebaseCollectionConfirmed.current = true;
+            setNativeConfigured(true);
+            setConsentState("granted");
+            setConsentError(null);
+            setRevocationPending(false);
+            return;
+          }
+
+          firebaseCollectionConfirmed.current = false;
+          setNativeConsentAtStartup(false);
+          setConsentState("denied");
+          setDistinctId(null);
           persistConsent("denied");
           setNativeConfigured(false);
+          setRevocationPending(true);
+          setConsentError(
+            !status.configured && status.confirmed
+              ? null
+              : firebaseStatusMessage(
+                  status,
+                  "Analytics could not be enabled and remains off. Retry the choice to try again.",
+                ),
+          );
+          try {
+            const disabled = await applyFirebaseConsent("denied");
+            setRevocationPending(!disabled.confirmed);
+            if (disabled.confirmed)
+              setConsentError("Analytics could not be enabled and remains off.");
+          } catch {
+            setRevocationPending(true);
+          }
+        } catch {
+          firebaseCollectionConfirmed.current = false;
+          persistConsent("denied");
           setConsentState("denied");
+          setNativeConsentAtStartup(false);
+          setNativeConfigured(false);
+          setDistinctId(null);
+          setRevocationPending(true);
+          setConsentError(
+            "Analytics could not be enabled and remains off. Retry the choice to try again.",
+          );
+          try {
+            const disabled = await applyFirebaseConsent("denied");
+            setRevocationPending(!disabled.confirmed);
+            if (disabled.confirmed)
+              setConsentError("Analytics could not be enabled and remains off.");
+          } catch {
+            setRevocationPending(true);
+          }
         }
-        setDistinctId(null);
         return;
       }
 
@@ -164,12 +330,18 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         setDistinctId(null);
       }
     },
-    [provider],
+    [applyFirebaseConsent, provider],
   );
+
+  const retryRevocation = useCallback(async () => setConsent("denied"), [setConsent]);
 
   const captureFirebaseEvent = useCallback(
     (event: string, properties?: AnalyticsProperties) => {
-      if (provider !== "firebase" || !firebaseCollectionEnabled(consent, nativeConfigured)) {
+      if (
+        provider !== "firebase" ||
+        !firebaseCollectionConfirmed.current ||
+        !firebaseCollectionEnabled(consent, nativeConfigured)
+      ) {
         return;
       }
       const allowed = firebaseEvent(event, properties);
@@ -192,12 +364,23 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AnalyticsContextValue>(
     () => ({
       consent,
+      consentError,
+      revocationPending,
       distinctId,
       setConsent,
+      retryRevocation,
       capture: captureFirebaseEvent,
       captureException: () => undefined,
     }),
-    [captureFirebaseEvent, consent, distinctId, setConsent],
+    [
+      captureFirebaseEvent,
+      consent,
+      consentError,
+      distinctId,
+      revocationPending,
+      retryRevocation,
+      setConsent,
+    ],
   );
 
   const token = import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN as string | undefined;
@@ -259,7 +442,10 @@ function EnabledAnalytics({
   const value = useMemo<AnalyticsContextValue>(
     () => ({
       consent,
+      consentError: null,
+      revocationPending: false,
       distinctId,
+      retryRevocation: async () => undefined,
       setConsent: async (next) => {
         if (next === "denied") {
           posthog.opt_out_capturing();
