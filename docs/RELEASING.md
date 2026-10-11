@@ -20,6 +20,20 @@ Bundle and uploads it to Google Play. It runs when you **push a tag like
 `v1.4.0`**, or on demand from the **Actions** tab ("Android release" → *Run
 workflow*, where you can choose the track).
 
+### Nonpublishing upload-key verification
+
+The manually dispatched **Verify Android upload key (nonpublishing)** workflow
+checks the configured repository signing secrets without building an app or
+calling Google Play. It runs only from `main` and is disabled unless the dispatch
+explicitly confirms the verification. It decodes the existing keystore into a
+private temporary runner directory, checks store unlock, alias and matching
+private-key access, then compares the public certificate SHA-256 with the
+verified upload certificate
+(`1F005203B034F4DB5342960F5BF73525122F8DB8F3AFBB4B3647D1C52937FC3C`).
+Temporary files are removed when the job exits. Logs contain only bounded check
+results and that public fingerprint; never enable shell tracing or add secret
+values to workflow output. This check does not modify or replace the upload key.
+
 ### One-time setup — add 5 repository secrets
 
 In GitHub: **Settings → Secrets and variables → Actions → New repository
