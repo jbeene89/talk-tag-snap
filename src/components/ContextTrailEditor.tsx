@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowLeft,
@@ -37,6 +37,8 @@ import {
   saveTrailDraft,
   saveTrailDraftBackup,
 } from "@/lib/context-trail-storage";
+import { hydrateTrailDraft, restoreTrailBackup } from "@/lib/context-trail-recovery";
+import { toggleTrailDrawingMode, type TrailDrawingMode } from "@/lib/context-trail-drawing-mode";
 import { openDocument, saveDocument, shareImage, usesNativeDocumentPicker } from "@/lib/native";
 import { createTrailPdf } from "@/lib/context-trail-pdf";
 import type { Annotation } from "@/lib/annotations";
@@ -114,7 +116,7 @@ export function ContextTrailEditor({
   const [hydrated, setHydrated] = useState(false);
   const [active, setActive] = useState(0);
   const [preview, setPreview] = useState(false);
-  const [boxing, setBoxing] = useState(false);
+  const [drawingMode, setDrawingMode] = useState<TrailDrawingMode>(null);
   const [draftBox, setDraftBox] = useState<TrailBox | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -124,7 +126,6 @@ export function ContextTrailEditor({
   const [videoAt, setVideoAt] = useState(0);
   const [videoPicked, setVideoPicked] = useState(0);
   const [newPrompt, setNewPrompt] = useState(false);
-  const [marking, setMarking] = useState(false);
   const [hasBackup, setHasBackup] = useState(false);
   const start = useRef<Point | null>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -133,6 +134,19 @@ export function ContextTrailEditor({
   const videoInput = useRef<HTMLInputElement>(null);
   const recordInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
+  const handleOpenCancel = useCallback(() => {
+    actionBusy.current = false;
+    setBusy(false);
+    setStatus("Open cancelled; current draft kept");
+  }, []);
+  const importInputRef = useCallback(
+    (input: HTMLInputElement | null) => {
+      importInput.current?.removeEventListener("cancel", handleOpenCancel);
+      importInput.current = input;
+      input?.addEventListener("cancel", handleOpenCancel);
+    },
+    [handleOpenCancel],
+  );
   const trailRef = useRef(trail);
   const importBusy = useRef(false);
   const actionBusy = useRef(false);
@@ -146,6 +160,8 @@ export function ContextTrailEditor({
   );
   trailRef.current = trail;
   const current = trail.levels[active];
+  const boxing = drawingMode === "link";
+  const marking = drawingMode === "annotation";
   const hasNext = active < trail.levels.length - 1;
   const ready = canPreviewTrail(trail);
   const completeLinks = trail.levels.slice(0, -1).filter((level) => level.hotspot).length;
@@ -153,21 +169,17 @@ export function ContextTrailEditor({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      let saved: ContextTrail | null = null;
       try {
-        saved = await loadTrailDraft();
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not open your draft.");
-      }
-      try {
-        let next = saved ?? emptyTrail();
-        if (saved) {
-          const previous = await loadTrailDraftBackup();
-          if (previous && !cancelled) setHasBackup(true);
-          next = await redactStoredPhotos(saved);
-        } else {
-          next.report = { ...initialRef.current.report };
-        }
+        const restored = await hydrateTrailDraft({
+          loadCurrent: loadTrailDraft,
+          loadBackup: loadTrailDraftBackup,
+          prepare: redactStoredPhotos,
+          emptyTrail: () => ({
+            ...emptyTrail(),
+            report: { ...initialRef.current.report },
+          }),
+        });
+        let next = restored.trail;
         if (!next.levels.length && initialRef.current.image) {
           const photo = await prepareImage(
             initialRef.current.image,
@@ -187,15 +199,26 @@ export function ContextTrailEditor({
           };
         }
         if (!cancelled) {
+          setHasBackup(restored.hasBackup);
+          trailRef.current = next;
           setTrail(next);
           setStatus(
-            saved?.levels.length ? "Draft restored on this device" : "Start wide, then move closer",
+            restored.backupReadError
+              ? "Working draft restored; previous recovery could not be checked"
+              : restored.hasBackup
+                ? "Draft restored on this device; previous recovery is available"
+                : next.levels.length
+                  ? "Draft restored on this device"
+                  : "Start wide, then move closer",
           );
+          if (restored.backupReadError) setError("Could not check the previous local recovery draft.");
+          setHydrated(true);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not open your draft.");
-      } finally {
-        if (!cancelled) setHydrated(true);
+        if (!cancelled) {
+          setStatus("Draft not restored; stored work was left untouched");
+          setError(e instanceof Error ? e.message : "Could not open your draft.");
+        }
       }
     })();
     return () => {
@@ -221,18 +244,6 @@ export function ContextTrailEditor({
       cancelled = true;
     };
   }, [trail, hydrated]);
-
-  useEffect(() => {
-    const input = importInput.current;
-    if (!input) return;
-    const handleCancel = () => {
-      actionBusy.current = false;
-      setBusy(false);
-      setStatus("Open cancelled; current draft kept");
-    };
-    input.addEventListener("cancel", handleCancel);
-    return () => input.removeEventListener("cancel", handleCancel);
-  }, []);
 
   async function close() {
     if (busy || actionBusy.current) return;
@@ -273,7 +284,7 @@ export function ContextTrailEditor({
       setTrail(next);
       setActive(before.levels.length > 0 ? before.levels.length - 1 : 0);
       setPreview(false);
-      setBoxing(false);
+      setDrawingMode(null);
       if (time !== undefined) setVideoPicked((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't add that photo. Try a JPG or PNG.");
@@ -313,8 +324,7 @@ export function ContextTrailEditor({
     setTrail(next);
     setActive(0);
     setPreview(false);
-    setBoxing(false);
-    setMarking(false);
+    setDrawingMode(null);
     setStatus(`Opened ${file.name}; previous draft kept in local recovery`);
   }
 
@@ -360,22 +370,26 @@ export function ContextTrailEditor({
     setBusy(true);
     setError("");
     try {
-      const backup = await loadTrailDraftBackup();
-      if (!backup) {
+      const restored = await restoreTrailBackup({
+        loadBackup: loadTrailDraftBackup,
+        current: trailRef.current,
+        prepare: redactStoredPhotos,
+        saveCurrent: saveTrailDraft,
+        saveBackup: saveTrailDraftBackup,
+        commit: (next) => {
+          trailRef.current = next;
+          setTrail(next);
+          setActive(0);
+          setPreview(false);
+          setDrawingMode(null);
+        },
+      });
+      if (!restored) {
         setHasBackup(false);
         setError("No previous trail is available to restore.");
         return;
       }
-      const currentTrail = trailRef.current;
-      await saveTrailDraft(currentTrail);
-      await saveTrailDraftBackup(currentTrail);
-      const restored = await redactStoredPhotos(backup);
-      trailRef.current = restored;
-      setTrail(restored);
-      setActive(0);
-      setPreview(false);
-      setBoxing(false);
-      setMarking(false);
+      setHasBackup(true);
       setStatus("Previous trail restored; replaced draft kept in local recovery");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not restore the previous trail.");
@@ -393,8 +407,7 @@ export function ContextTrailEditor({
   }
   function go(index: number) {
     setActive(index);
-    setBoxing(false);
-    setMarking(false);
+    setDrawingMode(null);
     setDraftBox(null);
     start.current = null;
   }
@@ -449,10 +462,10 @@ export function ContextTrailEditor({
           },
         ],
       });
-      setMarking(false);
+      setDrawingMode(null);
     } else {
       updateLevel({ hotspot: box });
-      setBoxing(false);
+      setDrawingMode(null);
     }
     setError("");
   }
@@ -543,8 +556,7 @@ export function ContextTrailEditor({
       setTrail(empty);
       setActive(0);
       setPreview(false);
-      setBoxing(false);
-      setMarking(false);
+      setDrawingMode(null);
       setNewPrompt(false);
       setVideo(null);
     } catch (e) {
@@ -919,8 +931,9 @@ export function ContextTrailEditor({
                                 }
                                 aria-pressed={marking}
                                 onClick={() => {
-                                  setMarking(!marking);
-                                  setBoxing(false);
+                                  setDrawingMode((mode) =>
+                                    toggleTrailDrawingMode(mode, "annotation"),
+                                  );
                                   setDraftBox(null);
                                 }}
                               >
@@ -956,7 +969,7 @@ export function ContextTrailEditor({
                                   disabled={busy}
                                   aria-pressed={boxing}
                                   onClick={() => {
-                                    setBoxing(!boxing);
+                                    setDrawingMode((mode) => toggleTrailDrawingMode(mode, "link"));
                                     setDraftBox(null);
                                     setError("");
                                   }}
@@ -1180,7 +1193,7 @@ export function ContextTrailEditor({
               }}
             />
             <input
-              ref={importInput}
+              ref={importInputRef}
               aria-label="Open Context Trail file"
               type="file"
               accept=".json,.html,application/json,text/html"
@@ -1188,11 +1201,7 @@ export function ContextTrailEditor({
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void openFile(f, true);
-                else {
-                  actionBusy.current = false;
-                  setBusy(false);
-                  setStatus("Open cancelled; current draft kept");
-                }
+                else handleOpenCancel();
                 e.target.value = "";
               }}
             />
