@@ -122,6 +122,36 @@ test("keeps long annotation labels within the content margins on continuation pa
   assert.ok(pageCount > 4, "long labels should exercise several continuation pages");
 });
 
+test("exports ten-plus marks at the right photo edge without clipping badge text", async () => {
+  const trail = fixture();
+  trail.levels = [trail.levels[0]];
+  trail.levels[0].annotations = Array.from({ length: 12 }, (_, index) => ({
+    id: `right-edge-mark-${index}`,
+    label: `Right-edge annotation ${index + 1}`,
+    box: { x: 0.98, y: 0.1, w: 0.02, h: 0.2 },
+    severity: "major" as const,
+    shape: "box" as const,
+  }));
+
+  const pdf = await createTrailPdf(trail, testFonts);
+  const bytes = Buffer.from(await pdf.arrayBuffer());
+  assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+  const decoded: Buffer[] = [];
+  for (const match of bytes.toString("latin1").matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try {
+      decoded.push(inflateSync(Buffer.from(match[1], "latin1")));
+    } catch {
+      continue;
+    }
+  }
+  const content = Buffer.concat(decoded).toString("latin1");
+  for (let index = 1; index <= 12; index++) {
+    assert.ok(content.includes(`Right-edge annotation ${index}`), `missing mark ${index}`);
+  }
+  assert.ok(content.includes("(10) Tj"));
+  assert.ok(content.includes("(12) Tj"));
+});
+
 test("renders and maps valid CJK, arrow, bullet and Greek report text", async () => {
   const trail = fixture();
   trail.levels = [trail.levels[0]];

@@ -189,10 +189,29 @@ function drawPhotoPage(doc: jsPDF, trail: ContextTrail, level: TrailLevel, index
     const mark = `${annotationIndex + 1}`;
     doc.setFontSize(9);
     doc.setFont(LATIN_FONT, "normal");
+    const badgeHeight = 13;
+    const badgeWidth = Math.min(
+      Math.max(16, doc.getTextWidth(mark) + 8),
+      Math.min(x + image.width, PAGE_WIDTH - MARGIN) - Math.max(x, MARGIN),
+    );
+    const badgeLeft = Math.max(
+      x,
+      MARGIN,
+      Math.min(left, Math.min(x + image.width, PAGE_WIDTH - MARGIN) - badgeWidth),
+    );
+    const badgeTop = Math.max(
+      y,
+      Math.min(top - 14, y + image.height - badgeHeight),
+    );
     doc.setFillColor(10, 10, 10);
-    doc.rect(left, Math.max(y, top - 14), Math.max(16, doc.getTextWidth(mark) + 8), 13, "F");
+    doc.rect(badgeLeft, badgeTop, badgeWidth, badgeHeight, "F");
     doc.setTextColor(...color);
-    drawText(doc, mark, left + 4, Math.max(y + 10, top - 4));
+    const markWidth = doc.getTextWidth(mark);
+    const markX = Math.max(
+      badgeLeft,
+      Math.min(badgeLeft + 4, badgeLeft + badgeWidth - markWidth),
+    );
+    drawText(doc, mark, markX, badgeTop + 10);
   });
   if (index < trail.levels.length - 1 && level.hotspot) {
     const hotspot = level.hotspot;
