@@ -102,6 +102,31 @@
   padding: 9px 12px;
   min-height: 44px;
 }
+.trail-report-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 900px;
+  margin-top: 10px;
+}
+.trail-report-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #a3a3a3;
+}
+.trail-report-fields input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #525252;
+  border-radius: 8px;
+  background: #171717;
+  color: #fafafa;
+  font: inherit;
+  font-size: 14px;
+}
 .trail-crumbs {
   display: flex;
   gap: 8px;
@@ -191,6 +216,7 @@
   box-shadow: 0 0 0 1px #0008;
   cursor: pointer;
   padding: 0;
+  z-index: 2;
 }
 .trail-hotspot > span {
   display: flex;
@@ -210,6 +236,23 @@
 }
 .trail-inert {
   pointer-events: none;
+}
+.trail-mark {
+  position: absolute;
+  z-index: 1;
+  border: 2px solid;
+  background: #facc1526;
+  pointer-events: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px #000;
+  padding: 2px 4px;
+}
+.trail-mark-redact {
+  background: #0a0a0a !important;
+  border: 0;
+  padding: 0;
 }
 .trail-view-nav {
   display: flex;
@@ -247,6 +290,49 @@
   border-radius: 8px;
   background: #171717;
   color: #fafafa;
+}
+.trail-details select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #525252;
+  border-radius: 8px;
+  background: #171717;
+  color: #fafafa;
+  font: inherit;
+}
+.trail-annotation-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #333;
+}
+.trail-annotation-editor h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+.trail-annotation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #404040;
+  border-radius: 8px;
+}
+.trail-annotation-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.trail-annotation-options label {
+  min-width: 0;
+}
+.trail-action-hint {
+  flex-basis: 100%;
+  color: #a3a3a3;
+  font-size: 12px;
+  line-height: 1.45;
 }
 .trail-details textarea {
   min-height: 90px;
@@ -385,6 +471,10 @@
     flex-direction: column;
     align-items: stretch;
     gap: 5px;
+  }
+  .trail-report-fields {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
   .trail-top,
   .trail-body {

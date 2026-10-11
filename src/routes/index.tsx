@@ -1057,6 +1057,7 @@ function AnnotatePage() {
             onClose={() => setTrailOpen(false)}
             initialImage={imageDataUrl}
             initialAnnotations={annotations}
+            initialReport={reportDetails}
           />
         </Suspense>
       )}

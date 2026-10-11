@@ -21,6 +21,26 @@ type ExportPlugin = {
 
 const Export = registerPlugin<ExportPlugin>("SoupyExport");
 
+type DocumentPlugin = {
+  saveDocument: (options: {
+    base64: string;
+    fileName: string;
+    mimeType: string;
+  }) => Promise<{ cancelled?: boolean; fileName?: string; uri?: string }>;
+  openDocument: () => Promise<{
+    cancelled?: boolean;
+    base64?: string;
+    fileName?: string;
+    mimeType?: string;
+  }>;
+};
+
+const DocumentPicker = registerPlugin<DocumentPlugin>("SoupyDocument");
+
+export function usesNativeDocumentPicker(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
+
 export async function openStoreListing(): Promise<void> {
   try {
     const { Browser } = await import("@capacitor/browser");
@@ -148,16 +168,33 @@ export async function saveDocument({
 }: {
   blob: Blob;
   fileName: string;
-}): Promise<void> {
-  if (Capacitor.isNativePlatform()) {
-    const { Filesystem, Directory } = await import("@capacitor/filesystem");
-    await Filesystem.writeFile({
-      path: `SoupyTag/${fileName}`,
-      data: await blobToBase64(blob),
-      directory: Directory.Documents,
-      recursive: true,
+}): Promise<{ cancelled: boolean; fileName: string; location?: string }> {
+  if (usesNativeDocumentPicker()) {
+    const result = await DocumentPicker.saveDocument({
+      base64: await blobToBase64(blob),
+      fileName,
+      mimeType: blob.type || "application/octet-stream",
     });
-    return;
+    return {
+      cancelled: Boolean(result.cancelled),
+      fileName: result.fileName || fileName,
+      ...(result.uri ? { location: result.uri } : {}),
+    };
   }
   downloadBlobInBrowser(blob, fileName);
+  return { cancelled: false, fileName };
+}
+
+export async function openDocument(): Promise<{ cancelled: boolean; file?: File }> {
+  if (!usesNativeDocumentPicker()) return { cancelled: false };
+  const result = await DocumentPicker.openDocument();
+  if (result.cancelled) return { cancelled: true };
+  if (!result.base64) throw new Error("The selected document was empty.");
+  const binary = atob(result.base64);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const fileName = result.fileName || "context-trail";
+  return {
+    cancelled: false,
+    file: new File([bytes], fileName, { type: result.mimeType || "application/octet-stream" }),
+  };
 }
