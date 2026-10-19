@@ -93,7 +93,7 @@ test("a failed hydration can retry and restore the same current draft without wr
   assert.equal(backupSaved.title, "Previous work");
 });
 
-test("a failed backup restore is processed before either saved draft can be replaced", async () => {
+test("a failed backup restore leaves both drafts and the UI unchanged", async () => {
   const current = draft("Current work");
   const previous = draft("Previous work");
   let currentSaved = current;
@@ -107,11 +107,9 @@ test("a failed backup restore is processed before either saved draft can be repl
       prepare: async () => {
         throw new Error("backup redaction failed");
       },
-      saveCurrent: async (trail) => {
-        currentSaved = trail;
-      },
-      saveBackup: async (trail) => {
-        backupSaved = trail;
+      saveRestoredDrafts: async (restored, replaced) => {
+        currentSaved = restored;
+        backupSaved = replaced;
       },
       commit: (trail) => {
         committed = trail;
@@ -123,4 +121,29 @@ test("a failed backup restore is processed before either saved draft can be repl
   assert.equal(currentSaved.title, "Current work");
   assert.equal(backupSaved.title, "Previous work");
   assert.equal(committed, null);
+});
+
+test("backup restore persists both drafts before committing the restored draft", async () => {
+  const current = draft("Current work");
+  const previous = draft("Previous work");
+  const events: string[] = [];
+  let currentSaved: ContextTrail | null = null;
+  let backupSaved: ContextTrail | null = null;
+
+  const restored = await restoreTrailBackup({
+    loadBackup: async () => previous,
+    current,
+    prepare: async (trail) => trail,
+    saveRestoredDrafts: async (nextCurrent, nextBackup) => {
+      currentSaved = nextCurrent;
+      backupSaved = nextBackup;
+      events.push("saved");
+    },
+    commit: () => events.push("committed"),
+  });
+
+  assert.equal(restored, true);
+  assert.deepEqual(currentSaved, previous);
+  assert.deepEqual(backupSaved, current);
+  assert.deepEqual(events, ["saved", "committed"]);
 });
