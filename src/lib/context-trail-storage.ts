@@ -54,3 +54,28 @@ export async function saveTrailDraft(trail: ContextTrail): Promise<void> {
 export async function saveTrailDraftBackup(trail: ContextTrail): Promise<void> {
   await transaction("readwrite", validateTrail(trail), "previous");
 }
+
+export async function saveRestoredTrailDrafts(
+  restored: ContextTrail,
+  previous: ContextTrail,
+): Promise<void> {
+  const currentValue = validateTrail(restored);
+  const previousValue = validateTrail(previous);
+  await pendingWrite;
+  const db = await database();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("drafts", "readwrite");
+      const store = tx.objectStore("drafts");
+      store.put(currentValue, "current");
+      store.put(previousValue, "previous");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () =>
+        reject(new Error("Could not save this draft. Save a trail file before closing."));
+      tx.onabort = () =>
+        reject(new Error("Draft storage is full. Save a trail file before closing."));
+    });
+  } finally {
+    db.close();
+  }
+}

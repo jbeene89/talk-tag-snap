@@ -35,6 +35,7 @@ import {
   loadTrailDraftBackup,
   saveTrailDraft,
   saveTrailDraftBackup,
+  saveRestoredTrailDrafts,
 } from "@/lib/context-trail-storage";
 import {
   hydrateTrailDraft,
@@ -414,8 +415,7 @@ export function ContextTrailEditor({
         loadBackup: loadTrailDraftBackup,
         current: trailRef.current,
         prepare: redactStoredPhotos,
-        saveCurrent: saveTrailDraft,
-        saveBackup: saveTrailDraftBackup,
+        saveRestoredDrafts: saveRestoredTrailDrafts,
         commit: (next) => {
           trailRef.current = next;
           setTrail(next);
