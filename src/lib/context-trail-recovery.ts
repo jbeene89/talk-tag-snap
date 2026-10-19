@@ -49,16 +49,14 @@ export async function restoreTrailBackup(options: {
   loadBackup: () => Promise<ContextTrail | null>;
   current: ContextTrail;
   prepare: (trail: ContextTrail) => Promise<ContextTrail>;
-  saveCurrent: (trail: ContextTrail) => Promise<void>;
-  saveBackup: (trail: ContextTrail) => Promise<void>;
+  swapDrafts: (current: ContextTrail, previous: ContextTrail) => Promise<void>;
   commit: (trail: ContextTrail) => void;
 }): Promise<boolean> {
   const backup = await options.loadBackup();
   if (!backup) return false;
   const restored = validateTrail(await options.prepare(backup));
   const current = validateTrail(options.current);
-  await options.saveCurrent(current);
-  await options.saveBackup(current);
+  await options.swapDrafts(restored, current);
   options.commit(restored);
   return true;
 }

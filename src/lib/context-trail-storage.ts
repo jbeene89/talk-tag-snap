@@ -31,6 +31,25 @@ async function transaction(
     db.close();
   }
 }
+
+async function swapTransaction(current: ContextTrail, previous: ContextTrail): Promise<void> {
+  const db = await database();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("drafts", "readwrite");
+      const store = tx.objectStore("drafts");
+      store.put(current, "current");
+      store.put(previous, "previous");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () =>
+        reject(new Error("Could not save this draft. Save a trail file before closing."));
+      tx.onabort = () =>
+        reject(new Error("Draft storage is full. Save a trail file before closing."));
+    });
+  } finally {
+    db.close();
+  }
+}
 let pendingWrite: Promise<void> = Promise.resolve();
 const persistLatest = createLatestWriter<ContextTrail>(async (trail) => {
   await transaction("readwrite", validateTrail(trail));
@@ -53,4 +72,7 @@ export async function saveTrailDraft(trail: ContextTrail): Promise<void> {
 }
 export async function saveTrailDraftBackup(trail: ContextTrail): Promise<void> {
   await transaction("readwrite", validateTrail(trail), "previous");
+}
+export async function swapTrailDrafts(current: ContextTrail, previous: ContextTrail): Promise<void> {
+  await swapTransaction(validateTrail(current), validateTrail(previous));
 }

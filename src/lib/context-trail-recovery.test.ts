@@ -107,11 +107,9 @@ test("a failed backup restore is processed before either saved draft can be repl
       prepare: async () => {
         throw new Error("backup redaction failed");
       },
-      saveCurrent: async (trail) => {
-        currentSaved = trail;
-      },
-      saveBackup: async (trail) => {
-        backupSaved = trail;
+      swapDrafts: async (newCurrent, newPrevious) => {
+        currentSaved = newCurrent;
+        backupSaved = newPrevious;
       },
       commit: (trail) => {
         committed = trail;
@@ -123,4 +121,30 @@ test("a failed backup restore is processed before either saved draft can be repl
   assert.equal(currentSaved.title, "Current work");
   assert.equal(backupSaved.title, "Previous work");
   assert.equal(committed, null);
+});
+
+test("restoreTrailBackup atomically swaps restored and current drafts", async () => {
+  const current = draft("Current work");
+  const backup = draft("Backup work");
+  let swappedCurrent: ContextTrail | null = null;
+  let swappedPrevious: ContextTrail | null = null;
+  let committed: ContextTrail | null = null;
+
+  const result = await restoreTrailBackup({
+    loadBackup: async () => backup,
+    current,
+    prepare: async (trail) => trail,
+    swapDrafts: async (newCurrent, newPrevious) => {
+      swappedCurrent = newCurrent;
+      swappedPrevious = newPrevious;
+    },
+    commit: (trail) => {
+      committed = trail;
+    },
+  });
+
+  assert.equal(result, true);
+  assert.equal(swappedCurrent!.title, "Backup work");
+  assert.equal(swappedPrevious!.title, "Current work");
+  assert.equal(committed!.title, "Backup work");
 });
