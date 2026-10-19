@@ -45,6 +45,27 @@ export async function hydrateTrailDraft(options: {
   return { trail, hasBackup: backup !== null, backupReadError };
 }
 
+export async function prepareTrailRedactions(
+  trail: ContextTrail,
+  prepareImage: (
+    image: string,
+    annotations: ContextTrail["levels"][number]["annotations"],
+  ) => Promise<{ image: string; width: number; height: number }>,
+): Promise<ContextTrail> {
+  const levels = await Promise.all(
+    trail.levels.map(async (level) => {
+      if (
+        level.redactionsBaked ||
+        !level.annotations.some((annotation) => annotation.kind === "redact")
+      )
+        return level;
+      const photo = await prepareImage(level.image, level.annotations);
+      return { ...level, ...photo, redactionsBaked: true };
+    }),
+  );
+  return { ...trail, levels };
+}
+
 export async function restoreTrailBackup(options: {
   loadBackup: () => Promise<ContextTrail | null>;
   current: ContextTrail;
