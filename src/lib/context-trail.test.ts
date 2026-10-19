@@ -68,6 +68,12 @@ test("reopens both a draft and its standalone viewer without losing frames or hi
   assert.deepEqual(parseTrail(JSON.stringify(t)), t);
   assert.deepEqual(parseTrail(trailHtml(t)), t);
 });
+test("processed redactions persist locally but are reprocessed when imported", () => {
+  const t = fixture();
+  t.levels[0].redactionsBaked = true;
+  assert.equal(validateTrail(t).levels[0].redactionsBaked, true);
+  assert.equal(parseTrail(JSON.stringify(t)).levels[0].redactionsBaked, undefined);
+});
 test("round-trips and re-edits three linked annotated photos and report metadata", () => {
   const original = fixture();
   original.levels.push({

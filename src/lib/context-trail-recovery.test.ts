@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hydrateTrailDraft, restoreTrailBackup } from "./context-trail-recovery.ts";
+import {
+  hydrateTrailDraft,
+  prepareTrailRedactions,
+  restoreTrailBackup,
+} from "./context-trail-recovery.ts";
 import type { ContextTrail } from "./context-trail.ts";
 
 function draft(title: string): ContextTrail {
@@ -26,6 +30,42 @@ test("a backup read failure does not prevent restoring the current draft", async
   assert.deepEqual(result.trail, current);
   assert.equal(result.hasBackup, false);
   assert.match(String(result.backupReadError), /backup unavailable/);
+});
+
+test("redacted photos are rasterized once and retain their processed state", async () => {
+  const trail: ContextTrail = {
+    ...draft("Redacted work"),
+    levels: [
+      {
+        id: "wide",
+        title: "Where",
+        note: "",
+        image: "original",
+        width: 100,
+        height: 80,
+        annotations: [
+          {
+            id: "private",
+            label: "",
+            box: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
+            kind: "redact",
+          },
+        ],
+      },
+    ],
+  };
+  let prepareCount = 0;
+  const prepare = async () => {
+    prepareCount += 1;
+    return { image: "redacted", width: 100, height: 80 };
+  };
+
+  const prepared = await prepareTrailRedactions(trail, prepare);
+  const reopened = await prepareTrailRedactions(prepared, prepare);
+
+  assert.equal(prepareCount, 1);
+  assert.equal(reopened.levels[0].image, "redacted");
+  assert.equal(reopened.levels[0].redactionsBaked, true);
 });
 
 test("failed draft processing never enables a draft replacement", async () => {

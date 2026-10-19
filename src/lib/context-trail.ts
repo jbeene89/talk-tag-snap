@@ -9,6 +9,7 @@ export type TrailLevel = {
   width: number;
   height: number;
   annotations: Annotation[];
+  redactionsBaked?: boolean;
   /** Normalized coordinates on this image, linking to the following level. */
   hotspot?: TrailBox;
   videoTime?: number;
@@ -91,7 +92,8 @@ export function validateTrail(value: unknown): ContextTrail {
       level.width < 1 ||
       level.height < 1 ||
       level.width > 2560 ||
-      level.height > 2560
+      level.height > 2560 ||
+      (level.redactionsBaked !== undefined && typeof level.redactionsBaked !== "boolean")
     )
       return fail();
     ids.add(level.id);
@@ -162,6 +164,9 @@ export function validateTrail(value: unknown): ContextTrail {
       width: level.width,
       height: level.height,
       annotations: cleanAnnotations,
+      ...(level.redactionsBaked !== undefined
+        ? { redactionsBaked: level.redactionsBaked }
+        : {}),
       ...(level.hotspot
         ? {
             hotspot: {
@@ -200,7 +205,15 @@ export function parseTrail(text: string): ContextTrail {
   const block = text.match(
     /<script type="application\/json" id="context-trail-data">([\s\S]*?)<\/script>/,
   );
-  return validateTrail(JSON.parse(block ? block[1] : text));
+  const trail = validateTrail(JSON.parse(block ? block[1] : text));
+  return {
+    ...trail,
+    levels: trail.levels.map((level) => {
+      const importedLevel = { ...level };
+      delete importedLevel.redactionsBaked;
+      return importedLevel;
+    }),
+  };
 }
 
 export function canPreviewTrail(trail: ContextTrail): boolean {

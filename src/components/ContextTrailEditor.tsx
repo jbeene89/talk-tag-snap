@@ -38,6 +38,7 @@ import {
 } from "@/lib/context-trail-storage";
 import {
   hydrateTrailDraft,
+  prepareTrailRedactions,
   replaceTrailFromFile,
   restoreTrailBackup,
 } from "@/lib/context-trail-recovery";
@@ -105,14 +106,7 @@ async function prepareImage(
 }
 
 async function redactStoredPhotos(trail: ContextTrail): Promise<ContextTrail> {
-  const levels = await Promise.all(
-    trail.levels.map(async (level) => {
-      if (!level.annotations.some((annotation) => annotation.kind === "redact")) return level;
-      const photo = await prepareImage(level.image, level.annotations);
-      return { ...level, ...photo };
-    }),
-  );
-  return { ...trail, levels };
+  return prepareTrailRedactions(trail, prepareImage);
 }
 
 export function ContextTrailEditor({
@@ -209,6 +203,9 @@ export function ContextTrailEditor({
                 title: "Where",
                 note: "",
                 annotations: initialRef.current.annotations.map((a) => structuredClone(a)),
+                ...(initialRef.current.annotations.some((a) => a.kind === "redact")
+                  ? { redactionsBaked: true }
+                  : {}),
               },
             ],
           };
